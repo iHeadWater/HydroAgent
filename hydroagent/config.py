@@ -292,6 +292,7 @@ def build_hydromodel_config(
     test_period: list[str] | None = None,
     algorithm_params: dict | None = None,
     param_range_file: str | None = None,
+    obj_func: str | None = None,
     warmup: int | None = None,
     output_dir: str | None = None,
     cfg: dict | None = None,
@@ -306,6 +307,8 @@ def build_hydromodel_config(
         test_period: Testing period [start, end].
         algorithm_params: Algorithm parameter overrides.
         param_range_file: Path to custom parameter range YAML file.
+        obj_func: Objective function override. One of NSE, KGE, LOGNSE, RMSE.
+            Takes precedence over cfg["defaults"]["obj_func"].
         warmup: Warmup days.
         output_dir: Output directory for results.
         cfg: Global config dict (from load_config).
@@ -322,6 +325,12 @@ def build_hydromodel_config(
     train_period = train_period or defaults["train_period"]
     test_period = test_period or defaults["test_period"]
     warmup = warmup if warmup is not None else defaults.get("warmup", 365)
+    requested_obj_func = (obj_func or defaults.get("obj_func", "NSE")).upper()
+    if requested_obj_func not in _OBJ_FUNC_MAP:
+        raise ValueError(
+            f"Unsupported obj_func '{requested_obj_func}'. "
+            f"Supported values: {', '.join(sorted(_OBJ_FUNC_MAP))}"
+        )
 
     # Build algorithm params
     algo_params = dict(algo_defaults.get(algorithm, {}))
@@ -381,10 +390,8 @@ def build_hydromodel_config(
             "algorithm_params": algo_params,
             "loss_config": {
                 "type": "time_series",
-                "obj_func": _OBJ_FUNC_MAP.get(
-                    defaults.get("obj_func", "NSE").upper(),
-                    defaults.get("obj_func", "NSE"),
-                ),
+                "obj_func": _OBJ_FUNC_MAP[requested_obj_func],
+                "requested_obj_func": requested_obj_func,
             },
             "output_dir": output_dir,
             "experiment_name": "",

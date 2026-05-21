@@ -18,6 +18,7 @@ def calibrate_model(
     test_period: list[str] | None = None,
     algorithm_params: dict | None = None,
     param_range_file: str | None = None,
+    obj_func: str | None = None,
     output_dir: str | None = None,
     data_source: str = "camels_us",
     _workspace: Path | None = None,
@@ -55,6 +56,8 @@ def calibrate_model(
             scipy keys: method ("SLSQP"/"L-BFGS-B"), max_iterations.
         param_range_file: Path to custom parameter range YAML. Use when default bounds
             are too narrow (e.g., when previous calibration hit a boundary).
+        obj_func: Objective function override. One of "NSE", "KGE", "LOGNSE", "RMSE".
+            Takes precedence over the configured default objective.
         output_dir: Output directory for results. Defaults to workspace/results/.
         data_source: Dataset type. One of "camels_us" (default), "camels_gb", "selfmade".
 
@@ -93,6 +96,7 @@ def calibrate_model(
         test_period=test_period,
         algorithm_params=algorithm_params,
         param_range_file=param_range_file,
+        obj_func=obj_func,
         output_dir=output_dir,
         _cfg=_cfg,
         _ui=_ui,

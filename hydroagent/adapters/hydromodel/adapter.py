@@ -42,6 +42,7 @@ class Adapter(PackageAdapter):
         test_period = kw.get("test_period")
         algorithm_params = kw.get("algorithm_params")
         param_range_file = kw.get("param_range_file")
+        obj_func = kw.get("obj_func")
         output_dir = kw.get("output_dir")
         _cfg = kw.get("_cfg")
         _ui = kw.get("_ui")
@@ -58,6 +59,7 @@ class Adapter(PackageAdapter):
             test_period=test_period,
             algorithm_params=algorithm_params,
             param_range_file=param_range_file,
+            obj_func=obj_func,
             output_dir=output_dir,
             cfg=_cfg,
         )
@@ -136,11 +138,25 @@ class Adapter(PackageAdapter):
                 if (_d / fname).exists():
                     observable_files[fname] = str(_d / fname)
 
+        training_cfg = config.get("training_cfgs", {})
+        loss_cfg = training_cfg.get("loss_config", {})
+        effective_config = {
+            "obj_func": loss_cfg.get("requested_obj_func", obj_func),
+            "hydromodel_obj_func": loss_cfg.get("obj_func"),
+            "algorithm_params": dict(training_cfg.get("algorithm_params", {})),
+            "random_seed": training_cfg.get("random_seed"),
+            "param_range_file": training_cfg.get("param_range_file"),
+            "train_period": config["data_cfgs"]["train_period"],
+            "test_period": config["data_cfgs"]["test_period"],
+            "output_dir": training_cfg.get("output_dir"),
+        }
+
         return {
             "best_params": parsed.get("best_params", {}),
             "calibration_dir": cal_dir,
             "train_period": config["data_cfgs"]["train_period"],
             "test_period": config["data_cfgs"]["test_period"],
+            "effective_config": effective_config,
             "output_files": parsed.get("output_files", []),
             "observable_files": observable_files,
             "model_name": model_name,
