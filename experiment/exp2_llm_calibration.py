@@ -57,8 +57,8 @@ BASINS = [
     ("03439000", "French Broad, NC", "humid_warm"),
 ]
 
-MODEL = "xaj"
-ZHU_MAX_ITERS = 15
+MODEL = "gr4j"
+ZHU_MAX_ITERS = 5
 LLM_MAX_ROUNDS = 5
 NSE_TARGET = 0.80
 
@@ -75,7 +75,7 @@ C2_BASE_URL = None  # set if C2 uses a different API endpoint
 # Run mode: set to "C" to skip Method A and B, only run Method C1 (and C2 if configured)
 # Useful for re-running Method C after fixing Agent behavior without re-running A/B.
 # Results for A/B are loaded from the existing checkpoint if available.
-RUN_ONLY = "C"    # None = run all methods | "C" = only run C1/C2
+RUN_ONLY = "AC"   # None = run all | "B" = only B | "C" = only C1/C2 | "AC" = A+C1, skip B
 
 # SCE-UA budget constants (for total evaluation count comparison)
 SCE_UA_REP_DEFAULT = 750
@@ -260,13 +260,17 @@ def _aggregate_method_a(runs: list[dict]) -> dict:
 def _zhu_method(basin_id: str, model_name: str, llm, cfg: dict, output_dir: str) -> dict:
     """Reproduce Zhu et al. 2026: LLM directly proposes parameter values, iteratively.
 
-    Scripted (not agent-driven) to faithfully reproduce the external method:
-    tight range (+-3% span) trick must be applied programmatically.
+    For GR4J (original paper model): scipy + 3% tight window (faithful reproduction).
+    For XAJ (15 params): SCE-UA + 7% window, KI+KG sum constraint enforced.
+    scipy SLSQP with 3% window cannot navigate 15-param space; SCE-UA is used instead.
     """
     from hydroagent.skills.calibration.calibrate import calibrate_model
     from hydroagent.skills.evaluation.evaluate import evaluate_model
     from hydroagent.skills.llm_calibration.llm_calibrate import DEFAULT_PARAM_RANGES
     import yaml
+
+    is_xaj = model_name.lower() == "xaj"
+    _window_frac = 0.07 if is_xaj else 0.03
 
     param_ranges = DEFAULT_PARAM_RANGES.get(model_name, {})
     history = []
@@ -306,6 +310,14 @@ def _zhu_method(basin_id: str, model_name: str, llm, cfg: dict, output_dir: str)
             logger.warning(f"Zhu iter {iteration}: LLM parse error: {e}")
             continue
 
+        # Enforce KI+KG < 0.7 for XAJ before building tight ranges
+        if is_xaj and "KI" in proposed and "KG" in proposed:
+            ki, kg = float(proposed["KI"]), float(proposed["KG"])
+            if ki + kg >= 0.7:
+                scale = 0.65 / (ki + kg)
+                proposed["KI"] = round(ki * scale, 4)
+                proposed["KG"] = round(kg * scale, 4)
+
         logger.info(f"  Zhu iter {iteration}: LLM proposed: {proposed}")
 
         tight_ranges = {}
@@ -314,7 +326,7 @@ def _zhu_method(basin_id: str, model_name: str, llm, cfg: dict, output_dir: str)
             if k not in param_ranges:
                 continue
             lo, hi = param_ranges[k]
-            margin = (hi - lo) * 0.03
+            margin = (hi - lo) * _window_frac
             r_lo = max(lo, float(v) - margin)
             r_hi = min(hi, float(v) + margin)
             if r_lo >= r_hi:
@@ -338,17 +350,29 @@ def _zhu_method(basin_id: str, model_name: str, llm, cfg: dict, output_dir: str)
             yaml.dump(range_yaml, tf, allow_unicode=True)
             range_file = tf.name
 
-        scipy_method = cfg.get("algorithms", {}).get("scipy", {}).get("method", "SLSQP")
         iter_dir = str(Path(output_dir) / f"iter_{iteration:02d}")
-        result = calibrate_model(
-            basin_ids=[basin_id],
-            model_name=model_name,
-            algorithm="scipy",
-            param_range_file=range_file,
-            output_dir=iter_dir,
-            algorithm_params={"method": scipy_method, "max_iterations": 30},
-            _cfg=cfg,
-        )
+        if is_xaj:
+            n_params = len(tight_ranges)
+            result = calibrate_model(
+                basin_ids=[basin_id],
+                model_name=model_name,
+                algorithm="SCE_UA",
+                param_range_file=range_file,
+                output_dir=iter_dir,
+                algorithm_params={"rep": 350, "ngs": max(10, 2 * n_params), "random_seed": 1234 + iteration * 137},
+                _cfg=cfg,
+            )
+        else:
+            scipy_method = cfg.get("algorithms", {}).get("scipy", {}).get("method", "SLSQP")
+            result = calibrate_model(
+                basin_ids=[basin_id],
+                model_name=model_name,
+                algorithm="scipy",
+                param_range_file=range_file,
+                output_dir=iter_dir,
+                algorithm_params={"method": scipy_method, "max_iterations": 30},
+                _cfg=cfg,
+            )
 
         nse, kge = -999.0, -999.0
         if result.get("success") and result.get("calibration_dir"):
@@ -410,8 +434,9 @@ def _run_method_a_single(basin_id: str, run_idx: int, cfg: dict) -> dict:
     task_workspace = OUTPUT_DIR / f"A_{MODEL}_{basin_id}" / f"run{run_idx+1}"
     task_workspace.mkdir(parents=True, exist_ok=True)
 
+    model_upper = MODEL.upper()
     query = (
-        f"请率定XAJ模型，流域{basin_id}，使用SCE-UA算法，"
+        f"请率定{model_upper}模型，流域{basin_id}，使用SCE-UA算法，"
         f"输出目录保存在 {task_workspace}。"
         f"完成后评估训练期和测试期的NSE和KGE指标。"
     )
@@ -495,14 +520,15 @@ def _run_method_c(basin_id: str, cfg: dict, label: str,
     if base_url_override:
         run_cfg["llm"]["base_url"] = base_url_override
 
+    model_upper = MODEL.upper()
     query = (
-        f"请对流域 {basin_id} 进行LLM智能率定XAJ模型，目标NSE>={NSE_TARGET}，"
+        f"请对流域 {basin_id} 进行LLM智能率定{model_upper}模型，目标NSE>={NSE_TARGET}，"
         f"最多{LLM_MAX_ROUNDS}轮，使用SCE-UA算法，输出目录 {task_workspace}。\n\n"
         f"必须严格按照以下三步执行，不可跳过：\n"
         f"第一步：调用 get_basin_attributes(basin_id='{basin_id}') 获取流域气候属性（aridity、"
         f"runoff_ratio、baseflow_index、frac_snow、climate_zone）\n"
-        f"第二步：根据返回的属性，参照 skill.md 中的 XAJ 参数气候区对照表，推理每个参数的"
-        "初始搜索范围，写出推理依据（如：aridity=0.45，属于湿润气候区，因此K范围设为...）\n"
+        f"第二步：根据返回的属性，参照 skill.md 中的 {model_upper} 参数气候区对照表，推理每个参数的"
+        "初始搜索范围，写出推理依据（如：aridity=0.45，属于湿润气候区，因此参数范围设为...）\n"
         f"第三步：将推理出的 param_ranges dict 作为参数传入 llm_calibrate，"
         f"让工具以此为起点进行迭代优化\n\n"
         f"完成所有轮次后，评估训练期和测试期的NSE和KGE指标。"
@@ -712,14 +738,15 @@ def run_experiment() -> dict:
         }
 
         # ── Method A: N_SEEDS_A independent runs ──
-        if RUN_ONLY == "C":
-            # Load A results from existing JSON if available, otherwise use empty placeholder
-            logger.info("[A] Skipped (RUN_ONLY='C') — loading from existing results if available")
+        if RUN_ONLY in ("B", "C"):
+            logger.info(f"[A] Skipped (RUN_ONLY='{RUN_ONLY}') — loading from existing results if available")
             existing = _load_existing_basin_record(basin_id)
             record["method_A_runs"] = existing.get("method_A_runs", [])
             record["method_A_agg"] = existing.get("method_A_agg", {})
         else:
+            existing = {}
             logger.info(f"[A] Standard SCE-UA (agent-driven, {N_SEEDS_A} independent runs)")
+            # RUN_ONLY="AC" falls through here (runs A, skips B, runs C)
             a_runs = []
             for run_idx in range(N_SEEDS_A):
                 logger.info(f"  A run {run_idx+1}/{N_SEEDS_A}")
@@ -735,8 +762,8 @@ def run_experiment() -> dict:
             record["method_A_agg"] = _aggregate_method_a(a_runs)
 
         # ── Method B: Zhu et al. (scripted, single run) ──
-        if RUN_ONLY == "C":
-            logger.info("[B] Skipped (RUN_ONLY='C') — loading from existing results if available")
+        if RUN_ONLY in ("C", "AC"):
+            logger.info(f"[B] Skipped (RUN_ONLY='{RUN_ONLY}') — loading from existing results if available")
             record["method_B"] = existing.get("method_B", {})
         else:
             logger.info("[B] Zhu et al. 2026 direct parameter proposal (scripted)")
@@ -755,12 +782,17 @@ def run_experiment() -> dict:
             )
 
         # ── Method C1: HydroAgent LLM range adjustment (primary LLM) ──
-        logger.info("[C1] HydroAgent LLM range adjustment (primary LLM)")
-        c1_entry = _run_method_c(basin_id, cfg, "C1")
-        record["method_C1"] = c1_entry
-        # Propagate basin_attributes to top-level record for easy access
-        if c1_entry.get("basin_attributes"):
-            record["basin_attributes"] = c1_entry["basin_attributes"]
+        if RUN_ONLY == "B":  # "AC" falls through to run C1
+            logger.info("[C1] Skipped (RUN_ONLY='B') — loading from existing results if available")
+            c1_entry = existing.get("method_C1", {})
+            record["method_C1"] = c1_entry
+        else:
+            logger.info("[C1] HydroAgent LLM range adjustment (primary LLM)")
+            c1_entry = _run_method_c(basin_id, cfg, "C1")
+            record["method_C1"] = c1_entry
+            # Propagate basin_attributes to top-level record for easy access
+            if c1_entry.get("basin_attributes"):
+                record["basin_attributes"] = c1_entry["basin_attributes"]
         def _f(v): return f"{v:.4f}" if isinstance(v, (int, float)) else "N/A"
         logger.info(
             f"  C1: KGE={_f(c1_entry.get('best_kge'))} "
@@ -786,7 +818,7 @@ def run_experiment() -> dict:
             record["method_C2"] = {"skipped": True, "reason": "C2_MODEL not configured"}
 
         # ── Delta: C1 vs A_mean, C2 vs A_mean (NSE primary) ──
-        a_nse_mean = record["method_A_agg"]["nse_test"].get("mean")
+        a_nse_mean = record["method_A_agg"].get("nse_test", {}).get("mean") if isinstance(record["method_A_agg"], dict) else None
         c1_nse = c1_entry.get("test_metrics", {}).get("NSE")
         c2_nse = record["method_C2"].get("test_metrics", {}).get("NSE") if C2_MODEL else None
 
@@ -799,7 +831,7 @@ def run_experiment() -> dict:
             if isinstance(c2_nse, float) and isinstance(a_nse_mean, float) else None
         )
         # Keep KGE delta for reference
-        a_kge_mean = record["method_A_agg"]["kge_train"].get("mean")
+        a_kge_mean = record["method_A_agg"].get("kge_train", {}).get("mean") if isinstance(record["method_A_agg"], dict) else None
         c1_kge = c1_entry.get("train_metrics", {}).get("KGE")
         record["delta_C1_vs_A_kge"] = (
             round(c1_kge - a_kge_mean, 4)

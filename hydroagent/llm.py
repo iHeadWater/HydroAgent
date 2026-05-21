@@ -37,17 +37,36 @@ class LLMResponse:
 
 
 class TokenTracker:
-    """Track token usage across API calls."""
+    """Track token usage across API calls.
+
+    Tracks both session-level totals AND per-call breakdown so downstream
+    metrics (e.g. tokens_per_useful_step) can attribute cost to specific
+    agent turns. Also captures `cached_tokens` from providers that report
+    it (OpenAI, DeepSeek, Qwen via Dashscope OpenAI-compat endpoint).
+    """
 
     def __init__(self):
         self.total_prompt = 0
         self.total_completion = 0
+        self.total_cached = 0
         self.call_count = 0
+        # Per-call records (most recent call last)
+        self.calls: list[dict] = []
 
-    def record(self, prompt: int, completion: int):
+    def record(self, prompt: int, completion: int, cached: int = 0):
         self.total_prompt += prompt
         self.total_completion += completion
+        self.total_cached += cached
         self.call_count += 1
+        self.calls.append({
+            "prompt": prompt,
+            "completion": completion,
+            "cached": cached,
+        })
+
+    def last_call(self) -> dict:
+        """Return the most recent call's token breakdown (empty dict if none)."""
+        return self.calls[-1] if self.calls else {}
 
     @property
     def total(self) -> int:
@@ -57,13 +76,16 @@ class TokenTracker:
         """Reset counters for a new session."""
         self.total_prompt = 0
         self.total_completion = 0
+        self.total_cached = 0
         self.call_count = 0
+        self.calls.clear()
 
     def summary(self) -> dict:
         return {
             "calls": self.call_count,
             "prompt_tokens": self.total_prompt,
             "completion_tokens": self.total_completion,
+            "cached_tokens": self.total_cached,
             "total_tokens": self.total,
         }
 
@@ -105,8 +127,14 @@ def detect_reasoning_style(model_name: str) -> str | None:
     """
     name = model_name.lower()
     # DeepSeek reasoning series: deepseek-r1, deepseek-r2, deepseek-r1-distill-*, etc.
+    # These embed <think>...</think> in content and must NOT have reasoning_content
+    # passed back.
     if "deepseek" in name and any(f"-r{d}" in name or f"_r{d}" in name for d in "123"):
         return "deepseek_r1"
+    # DeepSeek V4+ thinking-by-default (e.g. deepseek-v4-flash): server returns
+    # reasoning_content and *requires* it echoed back in subsequent turns.
+    if "deepseek" in name and any(f"v{d}" in name for d in "456789"):
+        return "deepseek_thinking"
     # QwQ (Qwen with thinking): qwq-32b, qwq-plus, etc.
     if "qwq" in name:
         return "qwen_thinking"
@@ -204,6 +232,13 @@ class LLMClient:
             # Auto-detect: try function calling, fallback if it fails
             self._supports_fc = self._detect_function_calling()
         return self._supports_fc
+
+    @property
+    def needs_reasoning_echo(self) -> bool:
+        """True if the model requires reasoning_content echoed back in assistant
+        turns (DeepSeek V4+ thinking mode). R1/qwen_thinking do NOT need this.
+        """
+        return self._reasoning_style == "deepseek_thinking"
 
     def chat(
         self,
@@ -322,8 +357,8 @@ class LLMClient:
         text = msg.content or ""
         thinking: str | None = None
 
-        if self._reasoning_style == "qwen_thinking":
-            # Dashscope returns thinking in reasoning_content field
+        if self._reasoning_style in ("qwen_thinking", "deepseek_thinking"):
+            # Dashscope/DeepSeek-V4 return thinking in reasoning_content field
             thinking = getattr(msg, "reasoning_content", None) or None
         elif self._reasoning_style == "deepseek_r1":
             thinking, text = self._extract_thinking(text)
@@ -356,7 +391,7 @@ class LLMClient:
             thinking: str | None = None
             raw_text: str | None = msg.content
 
-            if self._reasoning_style == "qwen_thinking":
+            if self._reasoning_style in ("qwen_thinking", "deepseek_thinking"):
                 thinking = getattr(msg, "reasoning_content", None) or None
             elif self._reasoning_style == "deepseek_r1" and raw_text:
                 thinking, raw_text = self._extract_thinking(raw_text)
@@ -504,9 +539,31 @@ class LLMClient:
             return False, str(e)
 
     def _track_tokens(self, response):
-        """Track token usage from API response."""
-        if hasattr(response, "usage") and response.usage:
-            self.tokens.record(
-                prompt=response.usage.prompt_tokens or 0,
-                completion=response.usage.completion_tokens or 0,
-            )
+        """Track token usage from API response, including cached prompt tokens.
+
+        Cache-hit token count is reported with different field names by provider:
+        - OpenAI / DashScope(Qwen) compat: usage.prompt_tokens_details.cached_tokens
+        - DeepSeek native (api.deepseek.com): usage.prompt_cache_hit_tokens
+        We read both so cache stats are captured regardless of endpoint. Providers
+        that expose neither report 0.
+        """
+        if not (hasattr(response, "usage") and response.usage):
+            return
+        usage = response.usage
+        cached = 0
+        # OpenAI / DashScope style: nested prompt_tokens_details.cached_tokens
+        details = getattr(usage, "prompt_tokens_details", None)
+        if details is not None:
+            cached = getattr(details, "cached_tokens", 0) or 0
+        # DeepSeek native style: top-level prompt_cache_hit_tokens. The OpenAI
+        # SDK keeps unknown fields in model_extra (pydantic v2), so check there too.
+        if not cached:
+            cached = getattr(usage, "prompt_cache_hit_tokens", 0) or 0
+        if not cached:
+            extra = getattr(usage, "model_extra", None) or {}
+            cached = extra.get("prompt_cache_hit_tokens", 0) or 0
+        self.tokens.record(
+            prompt=usage.prompt_tokens or 0,
+            completion=usage.completion_tokens or 0,
+            cached=cached,
+        )

@@ -304,7 +304,15 @@ class HydroAgent:
                         for tc in response.tool_calls
                     ],
                 }
+                # DeepSeek V4+ thinking mode requires reasoning_content echoed back.
+                if self.llm.needs_reasoning_echo and response.thinking:
+                    assistant_msg["reasoning_content"] = response.thinking
                 messages.append(assistant_msg)
+
+                # Attach LLM metadata (tokens, thinking) only to the FIRST tool
+                # call of this turn — subsequent tool calls in the same turn
+                # share the same LLM invocation, so don't double-count.
+                _llm_meta_attached_this_turn = False
 
                 for tc in response.tool_calls:
                     # Stop check before executing each tool
@@ -361,9 +369,19 @@ class HydroAgent:
                         with self.ui.suppress_tool_output(tc.name):
                             result = self._execute_tool(tc.name, tc.arguments)
                     finally:
-                        self.ui.on_tool_end(tc.name, result, time.time() - t0)
+                        _elapsed = time.time() - t0
+                        self.ui.on_tool_end(tc.name, result, _elapsed)
 
-                    self.memory.log_tool_call(tc.name, tc.arguments, result)
+                    # Attach per-turn LLM metadata only on first tool of this turn
+                    _first = not _llm_meta_attached_this_turn
+                    _llm_meta_attached_this_turn = True
+                    self.memory.log_tool_call(
+                        tc.name, tc.arguments, result,
+                        turn_id=turn,
+                        elapsed_s=_elapsed,
+                        llm_tokens=(self.llm.tokens.last_call() if _first else None),
+                        llm_thinking_excerpt=(response.thinking if _first else None),
+                    )
 
                     messages.append({
                         "role": "tool",
@@ -392,6 +410,20 @@ class HydroAgent:
                         )
                         messages.append({"role": "user", "content": nudge})
 
+                # Reconcile: every tool_call_id MUST have a tool response or strict
+                # APIs (DeepSeek) reject the next request with 400. Loop guards above
+                # may `break` mid-turn, leaving later parallel tool_calls unanswered.
+                _answered = {m.get("tool_call_id") for m in messages if m.get("role") == "tool"}
+                for tc in response.tool_calls:
+                    if tc.id not in _answered:
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tc.id,
+                            "content": json.dumps(
+                                {"error": "skipped due to loop guard", "success": False}
+                            ),
+                        })
+
                 # CC-2: inject task status once after ALL tool results for this turn
                 # (must be after all tool messages to avoid breaking the API message order)
                 task_note = self._get_task_status_note()
@@ -403,6 +435,7 @@ class HydroAgent:
                 if response.text:
                     messages.append({"role": "assistant", "content": response.text})
 
+                _llm_meta_attached_this_turn = False
                 for tc in response.tool_calls:
                     # Consecutive-call guard (same logic as function-calling branch)
                     _consecutive[tc.name] = _consecutive.get(tc.name, 0) + 1
@@ -447,9 +480,18 @@ class HydroAgent:
                         with self.ui.suppress_tool_output(tc.name):
                             result = self._execute_tool(tc.name, tc.arguments)
                     finally:
-                        self.ui.on_tool_end(tc.name, result, time.time() - t0)
+                        _elapsed = time.time() - t0
+                        self.ui.on_tool_end(tc.name, result, _elapsed)
 
-                    self.memory.log_tool_call(tc.name, tc.arguments, result)
+                    _first = not _llm_meta_attached_this_turn
+                    _llm_meta_attached_this_turn = True
+                    self.memory.log_tool_call(
+                        tc.name, tc.arguments, result,
+                        turn_id=turn,
+                        elapsed_s=_elapsed,
+                        llm_tokens=(self.llm.tokens.last_call() if _first else None),
+                        llm_thinking_excerpt=(response.thinking if _first else None),
+                    )
 
                     tool_result_content = f"Tool `{tc.name}` returned:\n```json\n{truncate_tool_result(tc.name, result)}\n```\nContinue with the next step."
                     task_note = self._get_task_status_note()
@@ -508,8 +550,9 @@ class HydroAgent:
         parts.append(self._load_system_prompt())
 
         # ── Section 1.5: Behavior policies (always included, even in minimal mode) ─
+        # Gateable for ablation experiments (default on -> normal behaviour).
         _policy_dir = Path(__file__).parent / "policy"
-        if _policy_dir.exists():
+        if getattr(self, "_inject_policies", True) and _policy_dir.exists():
             _policy_parts = [
                 pf.read_text(encoding="utf-8").strip()
                 for pf in sorted(_policy_dir.glob("*.md"))
@@ -537,10 +580,12 @@ class HydroAgent:
             parts.append(available_agents)
 
         # ── Section 3: Package adapter skill docs (always included) ─────────────
-        from hydroagent.adapters import get_all_skill_docs
-        adapter_docs = get_all_skill_docs()
-        if adapter_docs:
-            parts.append("## Package Adapter Skills\n" + "\n---\n".join(adapter_docs))
+        # Gateable for ablation experiments (default on -> normal behaviour).
+        if getattr(self, "_inject_adapter_docs", True):
+            from hydroagent.adapters import get_all_skill_docs
+            adapter_docs = get_all_skill_docs()
+            if adapter_docs:
+                parts.append("## Package Adapter Skills\n" + "\n---\n".join(adapter_docs))
 
         if self._prompt_mode == "minimal":
             logger.info("[agent] prompt_mode=minimal: skipping domain/basin/memory sections")
@@ -637,6 +682,10 @@ class HydroAgent:
         When running as a subagent, _subagent_system_prompt overrides the
         default system.md so the subagent uses its own focused instructions.
         """
+        # Experiment override: assemble a custom core system prompt (e.g. exp3
+        # knowledge-ablation builds a tools-only K0 prompt). Takes precedence.
+        if getattr(self, "_system_prompt_override", ""):
+            return self._system_prompt_override
         # CC-3: subagent custom prompt override
         if getattr(self, "_subagent_system_prompt", ""):
             return self._subagent_system_prompt

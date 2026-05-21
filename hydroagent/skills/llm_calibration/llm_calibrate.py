@@ -63,11 +63,62 @@ DEFAULT_PARAM_RANGES = {
     },
 }
 
+INITIAL_RANGE_PROPOSER_PROMPT = """You are a senior hydrological model calibration expert.
+You will design INITIAL parameter search ranges for {model_name} calibration on basin {basin_id},
+based on the basin's measured climate and hydrological attributes.
+
+## Basin: {basin_id}
+
+## Basin Attributes:
+{basin_attrs_text}
+
+## Default parameter ranges (full physically-valid space):
+{defaults_text}
+
+## Reasoning Principles
+Narrow each default range into a more focused, physically reasonable sub-region using the
+basin attributes. Reasoning anchors:
+  - High aridity (PET/P > 1.0) -> reduce upper bound of soil water storage; expect higher K
+  - High frac_snow (>0.1) -> widen lag/recession parameter range (snow accumulation delay)
+  - High baseflow_index -> lower CS upper bound; raise CG closer to 1
+  - High runoff_ratio (>0.5) -> reduce IM upper bound; lower K upper bound
+  - Mediterranean: strong seasonality -> keep K range wide [0.3, 1.0]
+  - humid_warm: high ET demand -> K [0.6, 1.0]
+  - humid_cold: snow lag -> L [1, 5], CI/CG slightly wider
+  - semiarid: low Q/P -> larger DM upper bound; smaller SM upper bound
+
+For XAJ specifically:
+  - KI + KG must remain < 0.7 (hard constraint in hydromodel)
+  - K range typical [0.2, 1.0]; never go below 0.1
+  - CG range typical [0.97, 0.999], near 1 for slow baseflow
+  - L range typical [0.5, 5]
+
+For GR4J specifically:
+  - x1 (production store): humid [800-2000], arid [100-800]
+  - x4 (UH lag time): snow basins [2-5], fast-response [0.5-2]
+  - x2 (groundwater exchange): typically [-5, 5]; humid basins may need negative range
+
+## Response Format
+Return ALL parameters in one JSON dict. Each value is [lower, upper], must be a sub-range
+of the default and lower < upper.
+```json
+{{"K": [0.3, 0.9], "B": [0.15, 0.35], "IM": [0.01, 0.08], "...": [..., ...]}}
+```
+
+After the JSON block, briefly explain (1 sentence each) the key narrowing decisions for
+parameters where you deviated significantly from defaults."""
+
+
 RANGE_ADVISOR_PROMPT = """You are a senior hydrological model calibration expert.
 Your role is to analyze SCE-UA calibration results and recommend adjustments for the next round.
 You may adjust BOTH parameter ranges AND optimization algorithm parameters.
 
 ## Model: {model_name}
+
+## Basin: {basin_id}
+
+## Basin Attributes:
+{basin_attrs_text}
 
 ## Current Parameter Ranges:
 {param_ranges_text}
@@ -167,9 +218,79 @@ def llm_calibrate(
             ),
             "success": False,
         }
-    current_ranges = dict(param_ranges or DEFAULT_PARAM_RANGES.get(model_name, {}))
-    if not current_ranges:
+
+    defaults_for_model = DEFAULT_PARAM_RANGES.get(model_name, {})
+    if not defaults_for_model:
         return {"error": f"No default parameter ranges for model {model_name}", "success": False}
+
+    # ── Basin-aware mode: fetch basin attributes & let LLM propose initial ranges ──
+    # Only triggers when caller did not pass explicit param_ranges.
+    primary_basin = basin_ids[0] if basin_ids else ""
+    basin_attrs: dict | None = None
+    used_basin_aware_init = False
+
+    if primary_basin:
+        try:
+            from hydroagent.tools.basin_attrs import get_basin_attributes
+            attrs = get_basin_attributes(
+                basin_id=primary_basin,
+                data_source=(_cfg or {}).get("dataset", "camels_us"),
+                _cfg=_cfg,
+            )
+            if attrs.get("success"):
+                basin_attrs = attrs
+                logger.info(
+                    f"[basin-aware] Fetched attributes for {primary_basin}: "
+                    f"aridity={attrs.get('aridity')}, climate={attrs.get('climate_zone')}, "
+                    f"frac_snow={attrs.get('frac_snow')}"
+                )
+            else:
+                logger.warning(
+                    f"[basin-aware] Could not fetch attributes for {primary_basin}: "
+                    f"{attrs.get('error', 'unknown error')}"
+                )
+        except Exception as e:
+            logger.warning(f"[basin-aware] Exception fetching attributes: {e}")
+
+    if param_ranges is None and basin_attrs and _llm:
+        proposed = _propose_initial_ranges_from_attributes(
+            llm=_llm,
+            model_name=model_name,
+            basin_id=primary_basin,
+            basin_attributes=basin_attrs,
+            defaults=defaults_for_model,
+        )
+        if proposed:
+            current_ranges = proposed
+            used_basin_aware_init = True
+            # Persist the LLM-proposed initial ranges to disk for transparency / audit
+            if _workspace:
+                _initial_yaml = Path(_workspace) / "_llm_param_ranges_round0_initial.yaml"
+                _initial_yaml.parent.mkdir(parents=True, exist_ok=True)
+                _initial_yaml.write_text(
+                    yaml.dump(
+                        {model_name: {
+                            "param_name": list(current_ranges.keys()),
+                            "param_range": {k: v for k, v in current_ranges.items()},
+                            "_basin_attributes_used": {
+                                k: basin_attrs.get(k) for k in
+                                ["aridity", "runoff_ratio", "baseflow_index",
+                                 "frac_snow", "climate_zone"]
+                                if basin_attrs.get(k) is not None
+                            },
+                        }},
+                        default_flow_style=False, allow_unicode=True,
+                    ),
+                    encoding="utf-8",
+                )
+                logger.info(f"[basin-aware] Initial LLM-proposed ranges saved: {_initial_yaml}")
+        else:
+            logger.warning(f"[basin-aware] Initial proposal failed, falling back to defaults")
+            current_ranges = dict(defaults_for_model)
+    else:
+        current_ranges = dict(param_ranges or defaults_for_model)
+        if param_ranges is None:
+            logger.info("[basin-aware] No basin attributes available; using default ranges")
 
     from hydroagent.skills.calibration.calibrate import calibrate_model
     from hydroagent.skills.evaluation.evaluate import evaluate_model
@@ -342,10 +463,13 @@ def llm_calibrate(
             break
 
         # Ask LLM to analyze results and suggest adjustments (ranges + algo params)
+        # Pass basin attributes so LLM can reason with physical context, not just optimizer output
         adj = _ask_llm_for_adjustments(
             _llm, model_name, current_ranges, round_params,
             train_metrics, nse_target, round_idx + 1,
             current_algo_params=round_algo_params,
+            basin_id=primary_basin,
+            basin_attributes=basin_attrs,
         )
 
         if adj is None:
@@ -383,6 +507,14 @@ def llm_calibrate(
         "basin_ids": basin_ids,
         "calibration_dir": best_result.get("calibration_dir", "") if best_result else "",
         "success": best_nse > -998.0,
+        # Basin-aware mode evidence (for paper ablation / verification)
+        "basin_aware_init": used_basin_aware_init,
+        "basin_attributes_used": (
+            {k: basin_attrs.get(k) for k in
+             ["aridity", "runoff_ratio", "baseflow_index", "frac_snow", "climate_zone"]
+             if basin_attrs and basin_attrs.get(k) is not None}
+            if basin_attrs else None
+        ),
         "observation_hint": (
             f"Each round's boundary_hits shows which params hit their range limits. "
             f"final_boundary_hits={final_boundary_hits}. "
@@ -440,9 +572,81 @@ def _detect_boundary_hits(params: dict, ranges: dict, threshold_pct: float = 5.0
     return hits
 
 
+def _format_basin_attrs(basin_attributes: dict | None) -> str:
+    """Format basin attributes for LLM prompt injection."""
+    if not basin_attributes or not basin_attributes.get("success", True):
+        return "  (no basin attributes available)"
+    keys = ["aridity", "runoff_ratio", "baseflow_index", "frac_snow",
+            "p_mean", "pet_mean", "slope_mean", "area_km2", "climate_zone"]
+    lines = []
+    for k in keys:
+        v = basin_attributes.get(k)
+        if v is not None:
+            lines.append(f"  - {k}: {v}")
+    return "\n".join(lines) if lines else "  (no recognized attributes)"
+
+
+def _parse_initial_ranges(text: str, defaults: dict) -> dict | None:
+    """Parse a JSON dict of {param: [lo, hi]} ranges from LLM response."""
+    import re as _re
+    match = _re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, _re.DOTALL)
+    if not match:
+        match = _re.search(r"(\{[^{}]+\})", text)
+    if not match:
+        return None
+    try:
+        ranges = json.loads(match.group(1))
+    except (json.JSONDecodeError, ValueError):
+        return None
+    if not isinstance(ranges, dict):
+        return None
+    validated: dict = {}
+    for name, val in ranges.items():
+        if isinstance(val, list) and len(val) == 2 \
+           and all(isinstance(x, (int, float)) for x in val) and val[0] < val[1]:
+            validated[name] = [float(val[0]), float(val[1])]
+    # Fill any missing keys with defaults so SCE-UA has all parameters
+    for k, v in defaults.items():
+        validated.setdefault(k, list(v))
+    return validated if validated else None
+
+
+def _propose_initial_ranges_from_attributes(
+    llm, model_name: str, basin_id: str, basin_attributes: dict, defaults: dict
+) -> dict | None:
+    """Ask LLM to design initial parameter ranges based on basin attributes."""
+    attrs_text = _format_basin_attrs(basin_attributes)
+    defaults_text = "\n".join(
+        f"  - {name}: [{r[0]}, {r[1]}]" for name, r in defaults.items()
+    )
+    system_prompt = INITIAL_RANGE_PROPOSER_PROMPT.format(
+        model_name=model_name,
+        basin_id=basin_id,
+        basin_attrs_text=attrs_text,
+        defaults_text=defaults_text,
+    )
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content":
+         f"Design basin-aware initial parameter ranges for {model_name} on basin {basin_id}."},
+    ]
+    try:
+        response = llm.chat(messages)
+    except Exception as e:
+        logger.warning(f"[basin-aware] Initial-range LLM call failed: {e}")
+        return None
+    parsed = _parse_initial_ranges(response.text, defaults)
+    if parsed:
+        logger.info(f"[basin-aware] LLM proposed initial ranges for {basin_id}: "
+                    f"{ {k: v for k, v in list(parsed.items())[:3]} } ...")
+    return parsed
+
+
 def _ask_llm_for_adjustments(
     llm, model_name, current_ranges, best_params, metrics, nse_target, round_num,
     current_algo_params: dict | None = None,
+    basin_id: str = "",
+    basin_attributes: dict | None = None,
 ) -> dict | None:
     """Ask LLM to analyze results and suggest adjustments to parameter ranges and/or algorithm params.
 
@@ -457,6 +661,8 @@ def _ask_llm_for_adjustments(
 
     system_prompt = RANGE_ADVISOR_PROMPT.format(
         model_name=model_name,
+        basin_id=basin_id or "(unknown)",
+        basin_attrs_text=_format_basin_attrs(basin_attributes),
         param_ranges_text=ranges_text,
         algo_params_text=algo_text,
     )

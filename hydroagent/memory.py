@@ -52,14 +52,42 @@ class Memory:
         self.memory_file.write_text(content, encoding="utf-8")
         logger.info("Saved knowledge to MEMORY.md")
 
-    def log_tool_call(self, tool_name: str, arguments: dict, result: Any):
-        """Log a tool call for session replay."""
+    def log_tool_call(
+        self,
+        tool_name: str,
+        arguments: dict,
+        result: Any,
+        *,
+        turn_id: int | None = None,
+        elapsed_s: float | None = None,
+        llm_tokens: dict | None = None,
+        llm_thinking_excerpt: str | None = None,
+    ):
+        """Log a tool call for session replay.
+
+        Optional kwargs (added 2026-05; backward-compatible with older callers):
+          turn_id: which agent loop iteration this tool was called in
+          elapsed_s: wall-clock seconds spent executing the tool
+          llm_tokens: per-turn LLM token breakdown
+                      {"prompt": int, "completion": int, "cached": int}
+          llm_thinking_excerpt: first ~500 chars of the LLM's chain-of-thought
+                                that produced this tool call (when available)
+        """
         entry = {
             "timestamp": datetime.now().isoformat(),
             "tool": tool_name,
             "arguments": _safe_serialize(arguments),
             "result_summary": _summarize_result(result),
         }
+        if turn_id is not None:
+            entry["turn_id"] = turn_id
+        if elapsed_s is not None:
+            entry["elapsed_s"] = round(elapsed_s, 3)
+        if llm_tokens:
+            entry["llm_tokens"] = llm_tokens
+        if llm_thinking_excerpt:
+            # Truncate to keep JSONL line size sane
+            entry["llm_thinking_excerpt"] = llm_thinking_excerpt[:500]
         self._log.append(entry)
 
         # Append to JSONL file
