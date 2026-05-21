@@ -230,3 +230,6 @@ basin_profiles/
 
 # Demo video (>100MB GitHub limit, hosted via user-attachments CDN instead)
 docs/media/*.mp4
+
+# Personal paper-writing artifacts (figures/results, not for publication)
+docs/figures/
