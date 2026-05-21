@@ -129,10 +129,10 @@ evaluate_model(calibration_dir=result['calibration_dir'], eval_period=test_perio
 
 | 情况 | 操作 |
 |------|------|
-| 报错原因不明，无法判断失败类型 | `read_file("hydroclaw/knowledge/failure_modes.md")` |
-| 同一工具报错反复出现 | `read_file("hydroclaw/knowledge/tool_error_kb.md")` |
-| 不确定流域属性归类方法 | `read_file("hydroclaw/knowledge/datasets.md")` |
-| 不确定 XAJ/GR4J 参数物理含义 | `read_file("hydroclaw/knowledge/model_parameters.md")` |
+| 报错原因不明，无法判断失败类型 | `read_file("hydroagent/knowledge/failure_modes.md")` |
+| 同一工具报错反复出现 | `read_file("hydroagent/knowledge/tool_error_kb.md")` |
+| 不确定流域属性归类方法 | `read_file("hydroagent/knowledge/datasets.md")` |
+| 不确定 XAJ/GR4J 参数物理含义 | `read_file("hydroagent/knowledge/model_parameters.md")` |
 
 ---
 

@@ -83,10 +83,10 @@ evaluate_model(calibration_dir, eval_period=test_period)    # 测试期
 
 | 情况 | 操作 |
 |------|------|
-| 报错原因不明，无法判断是哪类失败 | `read_file("hydroclaw/knowledge/failure_modes.md")` |
-| 同一工具报错反复出现 | `read_file("hydroclaw/knowledge/tool_error_kb.md")` |
-| 不确定数据集支持的流域或变量 | `read_file("hydroclaw/knowledge/datasets.md")` |
-| 不确定模型参数的物理含义 | `read_file("hydroclaw/knowledge/model_parameters.md")` |
+| 报错原因不明，无法判断是哪类失败 | `read_file("hydroagent/knowledge/failure_modes.md")` |
+| 同一工具报错反复出现 | `read_file("hydroagent/knowledge/tool_error_kb.md")` |
+| 不确定数据集支持的流域或变量 | `read_file("hydroagent/knowledge/datasets.md")` |
+| 不确定模型参数的物理含义 | `read_file("hydroagent/knowledge/model_parameters.md")` |
 
 ---
 
