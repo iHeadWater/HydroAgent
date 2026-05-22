@@ -10,8 +10,8 @@
 |------|------|---------|------|
 | `exp1_standard_calibration.py` | 标准率定基线 | Agent 自主规划工作流的可靠性 | 已完成 |
 | `exp2_llm_calibration.py` | LLM 率定 A/B/C 三路对比 | 自动化等价：C ≈ A，零人工干预 | 已完成 |
-| `exp3_capability_breadth.py` | Agent 能力广度 | NL 鲁棒性 + 动态 Skill + 批量自治 | 已完成 |
-| `exp4_knowledge_ablation.py` | 知识层消融 K0-K3 | 结构化知识注入的量化贡献 | 已完成 |
+| `exp4_capability_boundaries.py` | Agent 能力广度 | NL 鲁棒性 + 动态 Skill + 批量自治 | 已完成 |
+| `exp3_knowledge_ablation.py` | 知识层消融 K0-K3 | 结构化知识注入的量化贡献 | 已完成 |
 
 整体论证逻辑：
 
@@ -160,8 +160,8 @@ Exp4 -> 结构"有必要"              K0-K3逐层消融，量化每层知识的
 ```bash
 python experiment/exp1_standard_calibration.py   # ~3h
 python experiment/exp2_llm_calibration.py        # ~4h
-python experiment/exp3_capability_breadth.py     # ~2h
-python experiment/exp4_knowledge_ablation.py     # ~2h
+python experiment/exp4_capability_boundaries.py     # ~2h
+python experiment/exp3_knowledge_ablation.py     # ~2h
 ```
 
 注意：

@@ -62,6 +62,11 @@ def evaluate_model(
     from hydroagent.adapters import get_adapter
 
     # data_source/model_name not needed here since hydromodel adapter handles all calibration dirs
+    # Defensive: flatten LLM-wrapped nested period [["start","end"]] -> ["start","end"].
+    if (isinstance(eval_period, list) and len(eval_period) == 1
+            and isinstance(eval_period[0], list)):
+        eval_period = eval_period[0]
+
     adapter = get_adapter("camels_us", "")
     return adapter.execute("evaluate",
         workspace=_workspace or Path("."),

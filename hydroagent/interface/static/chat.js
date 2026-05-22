@@ -272,16 +272,30 @@ function updateToolCard(name, result, elapsed) {
 
 function updateCalProgress(ev) {
   const s = liveSess();
-  if (!s?.live) return;
-  const entry = Object.values(s.live.toolCards).find(e => e && typeof e === "object");
-  const id = entry?.id;
-  if (!id) return;
+  if (!s?.live) { console.log("[cal_progress] no live session"); return; }
+  // Find the currently-running calibration card (calibrate_model or llm_calibrate).
+  // Prefer an explicit match; fall back to any card whose DOM element is still "running".
+  const CAL_TOOLS = ["calibrate_model", "llm_calibrate"];
+  let id = null;
+  for (const t of CAL_TOOLS) {
+    const e = s.live.toolCards[t];
+    if (e && typeof e === "object") { id = e.id; break; }
+  }
+  if (!id) {
+    // last-resort: find the most-recently-added running card
+    const running = Object.values(s.live.toolCards)
+      .filter(e => e && typeof e === "object" &&
+              document.getElementById(e.id)?.dataset.status === "running");
+    id = running.length ? running[running.length - 1].id : null;
+  }
+  console.log("[cal_progress] toolCards=", Object.keys(s.live.toolCards), "id=", id);
+  if (!id) { console.log("[cal_progress] no card id found"); return; }
   const prog = document.getElementById(`${id}-progress`);
   if (!prog) return;
   const pct = Math.round(ev.pct || 0);
   const label = ev.round_label ? `${ev.round_label} · ` : "";
   prog.innerHTML = `
-    <div class="cal-progress-wrap">
+    <div class="cal-progress-bar-wrap">
       <div class="cal-progress-bar" style="width:${pct}%"></div>
     </div>
     <div class="cal-progress-label">${label}${pct}% · ${ev.eval_count || 0} evals · ${ev.elapsed || 0}s</div>`;

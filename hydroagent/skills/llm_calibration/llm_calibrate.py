@@ -9,6 +9,7 @@ Description: LLM-guided iterative calibration - LLM acts as a "virtual hydrologi
 
 import json
 import logging
+import time
 from pathlib import Path
 
 import yaml
@@ -162,6 +163,18 @@ No adjustment needed at all:
 Always explain your reasoning after the JSON block."""
 
 
+def _token_summary(llm) -> dict:
+    try:
+        return llm.tokens.summary()
+    except Exception:
+        return {}
+
+
+def _token_delta(before: dict, after: dict) -> dict:
+    keys = ["calls", "prompt_tokens", "completion_tokens", "cached_tokens", "total_tokens"]
+    return {k: int(after.get(k, 0) or 0) - int(before.get(k, 0) or 0) for k in keys}
+
+
 def llm_calibrate(
     basin_ids: list[str],
     model_name: str = "gr4j",
@@ -172,6 +185,7 @@ def llm_calibrate(
     algorithm_params: dict | None = None,
     train_period: list[str] | None = None,
     test_period: list[str] | None = None,
+    obj_func: str | None = None,
     output_dir: str | None = None,
     _workspace: Path | None = None,
     _cfg: dict | None = None,
@@ -195,6 +209,7 @@ def llm_calibrate(
         algorithm_params: Algorithm overrides as a JSON object, e.g. {"rep": 500, "ngs": 200}
         train_period: Training period ["YYYY-MM-DD", "YYYY-MM-DD"]
         test_period: Testing period ["YYYY-MM-DD", "YYYY-MM-DD"]
+        obj_func: Objective function override passed to calibrate_model.
         output_dir: Directory to save calibration results (optional)
 
     Returns:
@@ -228,6 +243,13 @@ def llm_calibrate(
     primary_basin = basin_ids[0] if basin_ids else ""
     basin_attrs: dict | None = None
     used_basin_aware_init = False
+    initial_range_evidence = {
+        "attempted": False,
+        "used": False,
+        "elapsed_s": 0.0,
+        "tokens": {},
+        "fallback_reason": "",
+    }
 
     if primary_basin:
         try:
@@ -253,6 +275,9 @@ def llm_calibrate(
             logger.warning(f"[basin-aware] Exception fetching attributes: {e}")
 
     if param_ranges is None and basin_attrs and _llm:
+        initial_range_evidence["attempted"] = True
+        _tok_before = _token_summary(_llm)
+        _t0 = time.time()
         proposed = _propose_initial_ranges_from_attributes(
             llm=_llm,
             model_name=model_name,
@@ -260,9 +285,12 @@ def llm_calibrate(
             basin_attributes=basin_attrs,
             defaults=defaults_for_model,
         )
+        initial_range_evidence["elapsed_s"] = round(time.time() - _t0, 3)
+        initial_range_evidence["tokens"] = _token_delta(_tok_before, _token_summary(_llm))
         if proposed:
             current_ranges = proposed
             used_basin_aware_init = True
+            initial_range_evidence["used"] = True
             # Persist the LLM-proposed initial ranges to disk for transparency / audit
             if _workspace:
                 _initial_yaml = Path(_workspace) / "_llm_param_ranges_round0_initial.yaml"
@@ -286,11 +314,15 @@ def llm_calibrate(
                 logger.info(f"[basin-aware] Initial LLM-proposed ranges saved: {_initial_yaml}")
         else:
             logger.warning(f"[basin-aware] Initial proposal failed, falling back to defaults")
+            initial_range_evidence["fallback_reason"] = "initial_range_proposal_failed"
             current_ranges = dict(defaults_for_model)
     else:
         current_ranges = dict(param_ranges or defaults_for_model)
         if param_ranges is None:
             logger.info("[basin-aware] No basin attributes available; using default ranges")
+            initial_range_evidence["fallback_reason"] = "no_basin_attributes_available"
+        else:
+            initial_range_evidence["fallback_reason"] = "explicit_param_ranges_supplied"
 
     from hydroagent.skills.calibration.calibrate import calibrate_model
     from hydroagent.skills.evaluation.evaluate import evaluate_model
@@ -321,10 +353,12 @@ def llm_calibrate(
 
     for round_idx in range(max_rounds):
         logger.info(f"=== LLM Calibration Round {round_idx + 1}/{max_rounds} ===")
+        round_started = time.time()
 
         # Write current ranges to YAML (hydromodel format) for this round
         param_range_file = None
-        if round_idx > 0:
+        use_custom_ranges = round_idx > 0 or used_basin_aware_init or param_ranges is not None
+        if use_custom_ranges:
             range_dir = _workspace or Path(".")
             param_range_file = str(range_dir / f"_llm_param_ranges_round{round_idx}.yaml")
             param_names = list(current_ranges.keys())
@@ -359,6 +393,7 @@ def llm_calibrate(
             )
 
         # Run calibration (pass _ui so progress events are emitted each round)
+        compute_started = time.time()
         result = calibrate_model(
             basin_ids=basin_ids,
             model_name=model_name,
@@ -367,6 +402,7 @@ def llm_calibrate(
             test_period=test_period,
             algorithm_params=round_algo_params if round_algo_params else None,
             param_range_file=param_range_file,
+            obj_func=obj_func,
             output_dir=str(((_workspace or Path("results")) / f"llm_round_{round_idx}")),
             _workspace=_workspace,
             _cfg=_cfg,
@@ -380,6 +416,8 @@ def llm_calibrate(
                 "round": round_idx + 1,
                 "error": result.get("error"),
                 "diagnosis": result.get("diagnosis", {}),
+                "algorithm_params": round_algo_params,
+                "round_wall_time_s": round(time.time() - round_started, 3),
             })
             continue
 
@@ -396,6 +434,14 @@ def llm_calibrate(
         nse = train_metrics.get("NSE", -999.0)
         if not isinstance(nse, float):
             nse = -999.0
+        test_eval_period = result.get("test_period") or test_period
+        test_eval = evaluate_model(
+            calibration_dir=cal_dir,
+            eval_period=test_eval_period,
+            _cfg=_cfg,
+        )
+        test_metrics = test_eval.get("metrics", {}) if test_eval.get("success") else {}
+        hydromodel_compute_time_s = round(time.time() - compute_started, 3)
 
         # Detect which parameters are near their boundaries (<5% of range span)
         boundary_hits = _detect_boundary_hits(round_params, current_ranges)
@@ -435,11 +481,14 @@ def llm_calibrate(
             "round": round_idx + 1,
             "param_ranges": dict(current_ranges),
             "best_params": round_params,
+            "algorithm_params": round_algo_params,
             "train_metrics": train_metrics,
+            "test_metrics": test_metrics,
             "nse": nse,
             "boundary_hits": boundary_hits,
             "calibration_dir": cal_dir,
             "fixed_params": newly_fixed,   # params fixed THIS round
+            "hydromodel_compute_time_s": hydromodel_compute_time_s,
         }
         history.append(round_record)
 
@@ -456,14 +505,31 @@ def llm_calibrate(
         # Early stopping if target reached
         if best_nse >= nse_target:
             logger.info(f"Target NSE {nse_target} reached at round {round_idx + 1}")
+            round_record["llm_adjustment"] = {
+                "ranges": None,
+                "algorithm_params": None,
+                "changed_ranges": {},
+                "stop_reason": "target_reached",
+            }
+            round_record["round_wall_time_s"] = round(time.time() - round_started, 3)
             break
 
         # Last round - no need to ask LLM for adjustments
         if round_idx >= max_rounds - 1:
+            round_record["llm_adjustment"] = {
+                "ranges": None,
+                "algorithm_params": None,
+                "changed_ranges": {},
+                "stop_reason": "max_rounds",
+            }
+            round_record["round_wall_time_s"] = round(time.time() - round_started, 3)
             break
 
         # Ask LLM to analyze results and suggest adjustments (ranges + algo params)
         # Pass basin attributes so LLM can reason with physical context, not just optimizer output
+        ranges_before_adjustment = {k: list(v) for k, v in current_ranges.items()}
+        _tok_before = _token_summary(_llm)
+        _t0 = time.time()
         adj = _ask_llm_for_adjustments(
             _llm, model_name, current_ranges, round_params,
             train_metrics, nse_target, round_idx + 1,
@@ -471,20 +537,41 @@ def llm_calibrate(
             basin_id=primary_basin,
             basin_attributes=basin_attrs,
         )
+        round_record["llm_decision_time_s"] = round(time.time() - _t0, 3)
+        round_record["llm_tokens"] = _token_delta(_tok_before, _token_summary(_llm))
 
         if adj is None:
             logger.info("LLM suggests no further adjustment needed")
+            round_record["llm_adjustment"] = {
+                "ranges": None,
+                "algorithm_params": None,
+                "changed_ranges": {},
+                "stop_reason": "llm_no_change",
+            }
+            round_record["round_wall_time_s"] = round(time.time() - round_started, 3)
             break
 
         new_ranges = adj.get("ranges")
         new_algo_params = adj.get("algo_params")
+        changed_ranges = {}
 
         if new_ranges:
+            for name, bounds in new_ranges.items():
+                old = ranges_before_adjustment.get(name)
+                if old is not None and list(bounds) != list(old):
+                    changed_ranges[name] = {"from": old, "to": list(bounds)}
             current_ranges = new_ranges
             logger.info(f"LLM adjusted ranges: {current_ranges}")
         if new_algo_params:
             _base_algo_params.update(new_algo_params)
             logger.info(f"LLM adjusted algorithm params: {new_algo_params}")
+        round_record["llm_adjustment"] = {
+            "ranges": new_ranges,
+            "algorithm_params": new_algo_params,
+            "changed_ranges": changed_ranges,
+            "stop_reason": "",
+        }
+        round_record["round_wall_time_s"] = round(time.time() - round_started, 3)
 
     final_boundary_hits = _detect_boundary_hits(
         best_params or {}, current_ranges
@@ -500,6 +587,9 @@ def llm_calibrate(
         "best_nse": best_nse if best_nse > -998.0 else None,
         "rounds": len(history),
         "nse_history": [h.get("nse") for h in history],  # compact, preserved in summary
+        "test_nse_history": [h.get("test_metrics", {}).get("NSE") for h in history],
+        "kge_history": [h.get("train_metrics", {}).get("KGE") for h in history],
+        "test_kge_history": [h.get("test_metrics", {}).get("KGE") for h in history],
         "history": history,
         "final_boundary_hits": final_boundary_hits,
         "fixed_params_by_round": fixed_params_by_round,
@@ -509,6 +599,7 @@ def llm_calibrate(
         "success": best_nse > -998.0,
         # Basin-aware mode evidence (for paper ablation / verification)
         "basin_aware_init": used_basin_aware_init,
+        "initial_range_evidence": initial_range_evidence,
         "basin_attributes_used": (
             {k: basin_attrs.get(k) for k in
              ["aridity", "runoff_ratio", "baseflow_index", "frac_snow", "climate_zone"]
@@ -604,7 +695,13 @@ def _parse_initial_ranges(text: str, defaults: dict) -> dict | None:
     for name, val in ranges.items():
         if isinstance(val, list) and len(val) == 2 \
            and all(isinstance(x, (int, float)) for x in val) and val[0] < val[1]:
-            validated[name] = [float(val[0]), float(val[1])]
+            if name not in defaults:
+                continue
+            phys_lo, phys_hi = defaults[name]
+            lo = max(float(val[0]), float(phys_lo))
+            hi = min(float(val[1]), float(phys_hi))
+            if lo < hi:
+                validated[name] = [lo, hi]
     # Fill any missing keys with defaults so SCE-UA has all parameters
     for k, v in defaults.items():
         validated.setdefault(k, list(v))

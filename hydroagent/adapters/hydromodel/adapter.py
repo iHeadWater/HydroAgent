@@ -20,6 +20,64 @@ from hydroagent.adapters.base import PackageAdapter
 logger = logging.getLogger(__name__)
 
 
+def _inject_param_range_into_model_cfgs(config: dict, param_dir=None) -> dict:
+    """Make the configured parameter range actually reach the model.
+
+    Workaround for a hydromodel unified-architecture limitation: the
+    `param_range_file` is loaded for parameter names and the [0,1] search
+    bounds, but is NOT fed into the model's denormalization. Both
+    `unified_calibrate.calibrate()` and `unified_evaluate.evaluate()` build the
+    model config as `{"name": model_name, **model_cfgs["model_params"]}`, so the
+    model only ever sees the built-in default range (MODEL_PARAM_DICT) and any
+    custom range is silently ignored — calibration and evaluation become
+    insensitive to the parameter range.
+
+    Fix: inject the resolved param_range into
+    `config["model_cfgs"]["model_params"][model_name]` so it is unpacked into
+    the model kwargs and used for denormalization.
+
+    Idempotent and forward-compatible: if the slot already carries a
+    param_range (e.g. a future fixed hydromodel populates it), it is left
+    untouched; failures degrade to the previous (default-range) behaviour.
+    """
+    import os
+
+    try:
+        from hydromodel.models.model_config import read_model_param_dict
+    except ImportError:
+        return config
+
+    model_cfgs = config.get("model_cfgs") or {}
+    model_name = model_cfgs.get("model_name")
+    if not model_name:
+        return config
+    model_params = model_cfgs.setdefault("model_params", {})
+
+    existing = model_params.get(model_name)
+    if isinstance(existing, dict) and "param_range" in existing:
+        return config  # already populated -- respect it (forward-compatible)
+
+    # Resolve the range file: prefer the copy saved alongside the calibration
+    # output (most faithful to this run), then the configured path.
+    prf = None
+    if param_dir:
+        cand = os.path.join(str(param_dir), "param_range.yaml")
+        if os.path.exists(cand):
+            prf = cand
+    if not prf:
+        tprf = (config.get("training_cfgs") or {}).get("param_range_file")
+        if tprf and os.path.exists(str(tprf)):
+            prf = str(tprf)
+
+    try:
+        pdict = read_model_param_dict(prf)  # prf=None -> hydromodel defaults
+        if model_name in pdict:
+            model_params[model_name] = pdict[model_name]
+    except Exception as e:  # noqa: BLE001 - never break the run over this
+        logger.warning("param_range injection skipped (%s): %s", model_name, e)
+    return config
+
+
 class Adapter(PackageAdapter):
     name = "hydromodel"
     priority = 10
@@ -63,6 +121,9 @@ class Adapter(PackageAdapter):
             output_dir=output_dir,
             cfg=_cfg,
         )
+        # Ensure the configured param_range reaches the model (hydromodel
+        # unified arch otherwise ignores it -- see helper docstring).
+        _inject_param_range_into_model_cfgs(config)
 
         try:
             from hydromodel import calibrate as hm_calibrate
@@ -223,6 +284,9 @@ class Adapter(PackageAdapter):
 
         try:
             config = load_config_from_calibration(calibration_dir)
+            # Ensure the configured param_range reaches the model for
+            # denormalization (hydromodel unified arch otherwise ignores it).
+            _inject_param_range_into_model_cfgs(config, param_dir=cal_path)
             actual_period = eval_period or config["data_cfgs"]["test_period"]
 
             if output_subdir is None:

@@ -68,7 +68,7 @@ function handleEvent(ev) {
     case "thought":             addThought(ev.text); break;
     case "tool_start":          ensureLive(); addToolCard(ev.name, ev.args); setStatus(`工具: ${TOOL_ZH[ev.name] || ev.name}`); break;
     case "tool_end":            updateToolCard(ev.name, ev.result, ev.elapsed); break;
-    case "calibration_progress":updateCalProgress(ev); break;
+    case "calibration_progress":console.log("[cal_progress] received", ev); updateCalProgress(ev); break;
     case "answer":              finalizeMessage(ev.text); break;
     case "ask_user":            showAskUser(ev.question, ev.context); break;
     case "session_id":          if (liveSess()) liveSess().serverSid = ev.id; break;

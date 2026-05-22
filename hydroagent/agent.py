@@ -313,6 +313,10 @@ class HydroAgent:
                 # call of this turn — subsequent tool calls in the same turn
                 # share the same LLM invocation, so don't double-count.
                 _llm_meta_attached_this_turn = False
+                # Collect total-call nudges to inject AFTER all tool responses;
+                # injecting a user message mid-loop breaks the assistant->tool
+                # contiguity that strict APIs (DeepSeek) require.
+                _pending_nudges: list[str] = []
 
                 for tc in response.tool_calls:
                     # Stop check before executing each tool
@@ -408,7 +412,7 @@ class HydroAgent:
                         logger.warning(
                             "Total-call nudge: %s called %d times.", tc.name, _total_calls[tc.name]
                         )
-                        messages.append({"role": "user", "content": nudge})
+                        _pending_nudges.append(nudge)
 
                 # Reconcile: every tool_call_id MUST have a tool response or strict
                 # APIs (DeepSeek) reject the next request with 400. Loop guards above
@@ -423,6 +427,11 @@ class HydroAgent:
                                 {"error": "skipped due to loop guard", "success": False}
                             ),
                         })
+
+                # Inject collected total-call nudges AFTER all tool responses
+                # (same ordering rule as task_note) so assistant->tool stays contiguous.
+                for _nudge in _pending_nudges:
+                    messages.append({"role": "user", "content": _nudge})
 
                 # CC-2: inject task status once after ALL tool results for this turn
                 # (must be after all tool messages to avoid breaking the API message order)

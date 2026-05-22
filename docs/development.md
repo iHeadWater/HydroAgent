@@ -88,8 +88,8 @@ HydroAgent/
 ├── experiment/                    # 论文实验脚本
 │   ├── exp1_standard_calibration.py
 │   ├── exp2_llm_calibration.py
-│   ├── exp3_capability_breadth.py
-│   ├── exp4_knowledge_ablation.py
+│   ├── exp4_capability_boundaries.py
+│   ├── exp3_knowledge_ablation.py
 │   ├── plot_paper_figures.py      # 生成论文图（待写）
 │   └── README.md                  # 实验设计说明
 │

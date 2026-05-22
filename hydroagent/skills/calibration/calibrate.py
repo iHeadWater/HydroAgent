@@ -86,6 +86,16 @@ def calibrate_model(
     """
     from hydroagent.adapters import get_adapter
 
+    # Defensive: LLMs sometimes wrap periods as [["start","end"]] (nested).
+    # Flatten a single-element list-of-list to ["start","end"] so hydromodel
+    # doesn't fail with "list index out of range".
+    def _flatten_period(p):
+        if isinstance(p, list) and len(p) == 1 and isinstance(p[0], list):
+            return p[0]
+        return p
+    train_period = _flatten_period(train_period)
+    test_period = _flatten_period(test_period)
+
     adapter = get_adapter(data_source, model_name)
     return adapter.execute("calibrate",
         workspace=_workspace or Path("."),
