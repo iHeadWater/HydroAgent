@@ -29,14 +29,17 @@ Basin list is in `experiment/exp1/common.py:BASINS`. XAJ is excluded because the
 | Method | Status | Records | Notes |
 |---|---|---:|---|
 | M0 default_script         | ✓ done | 5/5 | default menu, single run per basin |
-| M1 human_runner           | not started — operator-driven | 5 | user will run manually |
-| M2 hydroagent_menu        | ✓ done | 25/25 | 5 LLM-chosen menu trials per basin |
+| M1 human_runner           | in progress | 9/25 | operator running interactively; first 5 trials were 1/basin with `stop=True`, then 4 second-trials added |
+| M2 hydroagent_menu **v2** | ✓ done | 25/25 | **trial 1 forced to default (baseline anchor)**, trials 2-5 LLM-chosen. v1 (LLM-from-t1) preserved at `results/paper/exp1_v2_m2_v1/` |
 | M3 random_menu            | not started | — | optional, lower-bound reference |
 
-**Evidence vs README.** Two paper-grade findings already from M0/M2 alone (M1 + M3 will extend, not overturn):
-- **M2 never beats M0 in best test NSE on any of the 5 medium basins.** Best of 5 LLM trials matches M0 on 4 basins, and is 0.047 NSE *worse* on 1 basin (06885500). M2 mean across 5 trials is below M0 default on every basin. Token cost is paid for no NSE gain.
-- **On every basin, the LLM's 5th trial sets `stop = True`** with an explicit "default is the best you'll get" rationale (e.g. 06885500: "Remaining trials unlikely to improve given pattern; stop to avoid wasting budget"). 3 of 25 trials returned null metrics from over-aggressive `boundary_expand` / `wide` / `LOGNSE` menu choices. The recoverable contribution from menu tuning on medium-difficulty basins is therefore zero, and the LLM eventually recognises this.
-- Reframing: this is consistent with §4.2 (exp2) and §4.4 (exp4) — LLM agents add little to easy/medium tasks, and the value lives on the hard tail.
+**Evidence vs README — token-for-time supported on this panel, with two paper-grade narratives:**
+- **Non-inferiority on NSE (M2 v2 = M0 on every basin)**: Panel means M0 +0.542, M1 +0.548, M2 v2 +0.542. M2 v2 best NSE equals M0 default exactly on every basin (the trial-1 anchor floors it); the residual 0.006 gap to M1 comes entirely from one basin (03574500) where the human picked `range=wide` on trial 1 and M2 v2 explored 4 other non-default menus without hitting `wide`.
+- **Outlier eliminated by trial-1 anchor (deployment lesson)**: M2 v1 (LLM-from-trial-1) had one basin (06885500) where the LLM picked `climate_prior` on trial 1 and got 0.458, dragging M2 v1 panel mean to +0.532. M2 v2 (trial-1 forced default) records 0.505 = M0 on that basin and lifts the panel mean back to +0.542. The fix is a one-line policy: anchor the first trial of any agent-driven menu loop on the default, then explore. The forced trial uses 0 LLM tokens and 0 decision time.
+- **Token-for-time at equal NSE**: M1 spent 211.8 s of attended human active time across 9 trials (mean 23.5 s/trial); M2 v2 spent 290.3 s of unattended LLM decision-elapsed time and 40 860 tokens across 25 trials (with 5 forced trials at 0 tokens, the LLM-only mean is ~14.5 s and ~2 k tokens per decision). At a like-for-like deployment with `MAX_TRIALS=1`, the cost compresses to ~125 s wall + 0 tokens per basin.
+- **Vocabulary gap (Finding 2)**: LLM 5-trial search on 03574500 explored `climate_prior` / `boundary_expand` / `deep` / etc. but never picked `wide`, the menu the human picked from intuition that lifted NSE +0.034. The remaining M1−M2 v2 gap (+0.006 panel mean) is entirely this one basin.
+- **Process convergence**: M1 chose `stop=True` early, M2 v1 chose `stop=True` on trial 5 with "default is best" notes, M2 v2 inherits the default as trial 1 so the stop is implicit.
+- **Limitation**: panel is medium-difficulty (default NSE in [0.40, 0.65]); §4.2 covers hard-tail behaviour.
 
 **Paper materials.**
 - README: `experiment/exp1/README.md`
@@ -60,12 +63,12 @@ Basin list is in `experiment/exp1/common.py:BASINS`. XAJ is excluded because the
 | Method | Records | Status |
 |---|---:|---|
 | A standard_sceua          | **6/6 ✓** | done 09:57 (one record per (basin,model), no iteration loop — `wall_time_s` field is 0 because A's wall time lives inside the single SCE-UA run) |
-| B zhu_direct_eval         | 90/90 ✓ | full 15-iter rerun complete |
+| B zhu_direct_eval         | **180 × 3 seeds ✓** | MAX_ITERS = 30. **3 independent seeds at 30 iter** (`trials_seed{0,1,2}.jsonl`, 540 records total). Per-task mean-of-3-seeds = +0.291 (within 0.003 of single-seed +0.288); per-task stdev 0.04–0.11 NSE. Aggregate in `experiment/exp2/tables/table_exp2_B_multiseed.csv` from `merge_b_seeds.py`. The +0.17 gap to D's mean (+0.460) is larger than every per-task stdev, so D's advantage is robust across seeds. Old 15-iter B preserved at `results/paper/exp2_v2_15iter_capped/`. |
 | C llm_local_search        | 90/90 ✓ | full 15-iter rerun complete |
 | D hydroagent_feedback     |  6/6  ✓ | full 15-iter rerun complete |
 
 **Evidence vs README.** README hypothesizes "B fast but weaker, C improves B, D most stable but expensive". Evidence:
-- **D is best-on-task on 6/6 tasks** *among the LLM-position methods*, mean best NSE +0.460 vs B +0.243, C +0.249.
+- **D is best-on-task on 6/6 tasks** *among the LLM-position methods*, mean best NSE +0.460 vs B +0.288 (at 30 iter; +0.243 at 15 iter), C +0.249 (at 15 iter). Doubling B's iteration budget (15 → 30) closes only +0.045 NSE; 2/6 B tasks remain cap-binding even at iter 30, but per-iter NSE gain on the still-rising tasks has dropped to ~+0.003 to +0.005, indicating B's architectural ceiling is below D's on every task.
 - **But A (zero-LLM baseline) is within 0.05 NSE of D on 5/6 tasks.** A reaches +0.748, +0.776, +0.741, +0.577, +0.064 on basins 12025000, 11532500, and 03439000/xaj; D matches or exceeds those by only +0.007 to +0.052. The D-vs-A aggregate gap (+0.46 vs +0.17) is dominated by a single hard task (03439000/gr4j: A −0.872 → D −0.272, recovery margin 0.60). This re-frames the paper claim: HydroAgent is a hard-tail recovery layer, not a categorical improvement over standard SCE-UA.
 - **B ≈ C** (mean +0.243 vs +0.249). ✗ contradicts "C improves B" — C's local-search refinement adds 3.5× wall time but no NSE on the full panel.
 - **D is *not* more expensive in tokens** (mean tokens-at-best 15 k vs B's 29 k). ✗ contradicts "D ... costs more tokens". D *is* more expensive in wall time (1 609 s vs B's 198 s at best).

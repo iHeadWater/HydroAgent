@@ -26,7 +26,15 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-OUTPUT_ROOT = ROOT / "results" / "paper" / "exp1_v2"
+import os
+# EXP1_SCENARIO toggles between the medium-difficulty panel (default) and a
+# harder panel where the default-range GR4J calibration fails (test NSE < 0).
+# The two panels write to different output roots so they never collide.
+_SCENARIO = os.environ.get("EXP1_SCENARIO", "medium").lower()
+if _SCENARIO not in {"medium", "hard"}:
+    raise ValueError(f"EXP1_SCENARIO must be 'medium' or 'hard', got {_SCENARIO!r}")
+
+OUTPUT_ROOT = ROOT / "results" / "paper" / ("exp1_v2" if _SCENARIO == "medium" else "exp1_v2_hard")
 TABLES_DIR = Path(__file__).resolve().parent / "tables"
 FIGURES_DIR = Path(__file__).resolve().parent / "figures"
 
@@ -37,21 +45,31 @@ MAX_TRIALS = 5
 RANDOM_REPEATS = 5
 NONINFERIORITY_MARGIN = -0.02
 
-# Selected 2026-05-24 from the GR4J screen (default-range, quick budget) over 60
-# CAMELS-US basins: the 7 candidates with test NSE in [0.40, 0.65] were filtered
-# to 5 with one basin per USGS HUC region (01/03/05/06/07) so the panel covers
-# climate diversity without picking from the same hydrologic neighborhood.
-# climate_zone is left "unknown" because CAMELS does not ship a labelled
-# climate class; downstream `climate_prior` range policy will fall back to the
-# default range (probe_difficulty.py:87).
-BASINS: list[dict[str, str]] = [
+# Medium-difficulty panel (default-range test NSE in [0.40, 0.65]): selected
+# 2026-05-24 from the GR4J screen over 60 CAMELS-US basins. One basin per HUC
+# (01/03/05/06/07) for climate diversity.
+_BASINS_MEDIUM: list[dict[str, str]] = [
     {"basin_id": "01543000", "name": "HUC01 New England",   "climate_zone": "unknown"},
     {"basin_id": "03574500", "name": "HUC03 South Atlantic", "climate_zone": "unknown"},
     {"basin_id": "05495000", "name": "HUC05 Ohio/Tennessee", "climate_zone": "unknown"},
     {"basin_id": "06885500", "name": "HUC06 Missouri",       "climate_zone": "unknown"},
     {"basin_id": "07197000", "name": "HUC07 Mississippi",    "climate_zone": "unknown"},
 ]
-MODELS = ["gr4j"]  # XAJ only had 1 medium candidate in screen; stick to GR4J for exp1 v2
+
+# Hard panel (default-range test NSE in [-0.6, -0.08]): same screen pool,
+# basins where the default range fails and menu tuning has measurable leverage.
+# HUCs 02/03/04/11/13 chosen to be disjoint from the medium panel except HUC03
+# (which gets a different basin). All GR4J; XAJ skipped for this panel too.
+_BASINS_HARD: list[dict[str, str]] = [
+    {"basin_id": "02193340", "name": "HUC02 (default NSE -0.08)", "climate_zone": "unknown"},
+    {"basin_id": "03364500", "name": "HUC03 (default NSE -0.25)", "climate_zone": "unknown"},
+    {"basin_id": "04197170", "name": "HUC04 (default NSE -0.36)", "climate_zone": "unknown"},
+    {"basin_id": "11237500", "name": "HUC11 (default NSE -0.57)", "climate_zone": "unknown"},
+    {"basin_id": "13338500", "name": "HUC13 (default NSE -0.38)", "climate_zone": "unknown"},
+]
+
+BASINS: list[dict[str, str]] = _BASINS_MEDIUM if _SCENARIO == "medium" else _BASINS_HARD
+MODELS = ["gr4j"]  # GR4J only on both panels (XAJ screen produced only 1 medium survivor)
 OBJECTIVES = ["NSE", "KGE", "LOGNSE"]
 RANGE_POLICIES = ["default", "climate_prior", "wide", "boundary_expand"]
 BUDGET_LEVELS = ["quick", "default", "deep"]

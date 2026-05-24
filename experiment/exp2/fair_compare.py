@@ -231,8 +231,9 @@ def main() -> None:
         cap_hits = sum(1 for s in rs if s["cap_binding"])
         mean_wall_at_best = sum(s["cum_wall_at_best_s"] for s in rs) / n
         mean_tok_at_best = sum(s["cum_tok_at_best"] for s in rs) / n
+        max_iters = max((s.get("iters") or 0) for s in rs) or "?"
         print(f"  {m}: tasks={n}  mean_best_NSE={mean_best:+.4f}  "
-              f"mean_iter@best={mean_iter_at_best:.1f}/15  cap_binding={cap_hits}/{n}  "
+              f"mean_iter@best={mean_iter_at_best:.1f}/{max_iters}  cap_binding={cap_hits}/{n}  "
               f"mean_wall@best={mean_wall_at_best:.0f}s  mean_tok@best={mean_tok_at_best:.0f}")
 
 

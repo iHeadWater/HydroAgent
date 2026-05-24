@@ -345,8 +345,16 @@ def build_hydromodel_config(
         if isinstance(algorithm_params, dict):
             algo_params.update(algorithm_params)
 
-    # Extract random_seed separately (it's a training_cfg, not algorithm_param)
-    random_seed = algo_params.pop("random_seed", 1234)
+    # random_seed lives in both places: training_cfgs.random_seed (read by
+    # hydromodel's top-level config) AND inside algorithm_params (read by
+    # SCE-UA via algorithm_config.get("random_seed") in
+    # hydromodel/trainers/unified_calibrate.py:819). Using .pop() previously
+    # removed it from algo_params and left only training_cfgs.random_seed,
+    # so SCE-UA fell back to its hardcoded 1234 default on every trial —
+    # making every same-menu, different-trial calibration identical even
+    # though our budget_params() generated a different seed per trial.
+    # Use .get() so the seed lives in both places.
+    random_seed = algo_params.get("random_seed", 1234)
 
     # Determine output directory
     if not output_dir:

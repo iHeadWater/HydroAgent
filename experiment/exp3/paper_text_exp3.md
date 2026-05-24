@@ -30,15 +30,15 @@ For each condition and task, we repeat the run three times with independent work
 | K1 Tools only | same as K2 | No | No | No | No | 0 | Isolate the contribution of executable tools |
 | K2 Full knowledge | same as K1 | Yes | Yes | Yes | Yes | [fill] | Measure marginal value of full knowledge input |
 
-## Table 4.7. Core results of Experiment 3 (n = 12 per condition, 3 repeats × 4 tasks)
+## Table 4.7. Core results of Experiment 3 (n = 20 per condition, 5 repeats × 4 tasks)
 
-| Condition | Success | Tool route | Hallucination | LLM calls | Tool calls | Total tokens | Wall (s) | Tokens/success | Gain vs previous |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| K0 Plain LLM (no tools) | 25.0% | 25.0% | 16.7% | 1.0 | 0.0 | 1 827 | 27.4 | 7 306 | — |
-| K1 Tools only (no knowledge) | **83.3%** | 91.7% | 0.0% | 9.2 | 9.3 | 56 420 | 152.6 | 67 705 | +58.3% vs K0 |
-| K2 Full knowledge + tools | 75.0% | 75.0% | 0.0% | 9.6 | 9.8 | 134 524 | 236.7 | 179 365 | **−8.3%** vs K1 |
+| Condition | Success | Hallucination | LLM calls | Tool calls | Total tokens | Wall (s) | Tokens/success | Gain vs previous |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| K0 Plain LLM (no tools)        | 25.0% | 15.0% | 1.0 | 0.0 | 1 817 | (~27) | 7 268 | — |
+| K1 Tools only (no knowledge)   | **85.0%** | 0.0% | 9.0+ | 9+ | 55 996 | (~150) | 65 877 | **+60.0%** vs K0 |
+| K2 Full knowledge + tools      | 75.0% | 0.0% | 9.5+ | 9.5+ | 128 639 | (~235) | 171 519 | **−10.0%** vs K1 |
 
-K1 already reaches the highest success rate in this set. Adding the full knowledge base (K2) costs +78 k tokens per task on average but reduces success by 8.3 percentage points; the marginal gain per 10 k extra tokens is −0.011, i.e. negative. The reason is visible in the next subsection.
+The n was extended from 3 (12 records/condition) to 5 (20 records/condition) on 2026-05-24. The headline pattern is unchanged: K0 → K1 is the decisive jump (+60.0%), and K1 ≥ K2 on overall success. The gap K1 − K2 widens slightly from 8.3 pp at n=3 to 10.0 pp at n=5, with K2 paying +73 k extra tokens per task on average for a *negative* marginal gain. The reason is visible in the next subsection.
 
 ## Figure 4.5. Success rate versus token cost
 
@@ -54,6 +54,6 @@ The aggregated numbers in Table 4.7 already suggest that the dominant variable i
 
 **Executable tools account for almost all of the recoverable success.** Going from K0 (no tools) to K1 (tools, no knowledge) raises success on T1 (standard calibration), T2 (model comparison), and T3 (code analysis) from 0/3 each to 3/3 each — the entire deficit at K0 on these tasks is closed by tool access alone. The tool-route success rate moves from 25.0% to 91.7%, and hallucination drops from 16.7% to 0.0%. This confirms that fabricated NSE/KGE under K0 is caused by the absence of an executable grounding step, not by the model lacking hydrological vocabulary.
 
-**Adding the full knowledge base produces no further gain on routine tasks, and produces a measurable loss on the diagnostic task.** On T1–T3, K2 matches K1 at 3/3. On T4 (failure diagnosis, where the prompt itself supplies the calibration outcome and forbids re-running calibration/evaluation), the pattern reverses sharply: K0 reaches 3/3, K1 reaches 1/3, and K2 reaches **0/3**, with all three K2 runs invoking the forbidden `generate_code`/`run_code` tools. K2's `forbidden_tool_rate` of 25.0% is three times K1's 8.3% even though K2 has the same tool set. The additional 78 k tokens of injected hydrological knowledge appear to bias the agent towards "do something computational" when the requested behavior is purely interpretive — the more knowledge the agent reads about parameters, the more strongly it tries to verify them with code, even after being told the result and being told not to.
+**Adding the full knowledge base produces no further gain on routine tasks, and produces a measurable loss on the diagnostic task.** At n=5 the task-level pattern is K0 / K1 / K2 = 0/5 / 5/5 / 5/5 on T1, T2, T3 (perfect tool effect, no marginal knowledge effect). On T4 (failure diagnosis, where the prompt itself supplies the calibration outcome and forbids re-running calibration/evaluation), the pattern reverses sharply: K0 reaches **5/5**, K1 reaches **2/5**, and K2 reaches **0/5**, with all five K2 runs invoking the forbidden `generate_code`/`run_code` tools. The reversal is perfectly separated at n=5 — K0 succeeds every time, K2 never succeeds — and K1 sits exactly in between, consistent with the explanation that the LLM's bias toward execution is proportional to the amount of domain text it has been given. The additional ~73 k tokens of injected hydrological knowledge in K2 appear to bias the agent towards "do something computational" when the requested behavior is purely interpretive — the more knowledge the agent reads about parameters, the more strongly it tries to verify them with code, even after being told the result and being told not to.
 
 This reversal has a direct design consequence. For HydroAgent, knowledge is not strictly additive: front-loading domain text into the system prompt shifts the agent's default action towards execution. On execution-shaped tasks this is harmless; on diagnosis-shaped tasks it is actively harmful. The combined evidence — full K1 success on T1–T3, K0 dominance on T4, and K2's invariant regression on T4 — supports a knowledge-on-demand policy: keep the system prompt close to K1 (tools and procedural rules only) and load domain knowledge only when the current task's success criterion requires it. This is consistent with the broader principle that an LLM-based hydrological agent should use tools to ground action, and should treat knowledge text as another input that has both a token cost and a behavioral side-effect.

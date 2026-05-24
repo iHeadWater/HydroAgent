@@ -240,6 +240,7 @@ def iter_trial_keys(
     conditions: list[str] | None = None,
     task_ids: list[str] | None = None,
     repeats: int = DEFAULT_REPEATS,
+    start_repeat: int = 1,
     smoke: bool = False,
 ) -> list[TrialKey]:
     selected_conditions = conditions or [c["condition_id"] for c in CONDITIONS]
@@ -247,12 +248,12 @@ def iter_trial_keys(
     if smoke:
         selected_conditions = selected_conditions[: min(3, len(selected_conditions))]
         selected_tasks = selected_tasks[:1]
-        repeats = 1
+        repeats = max(start_repeat, 1)
     return [
         TrialKey(condition_id=cid, task_id=tid, repeat=rep)
         for cid in selected_conditions
         for tid in selected_tasks
-        for rep in range(1, repeats + 1)
+        for rep in range(start_repeat, repeats + 1)
     ]
 
 

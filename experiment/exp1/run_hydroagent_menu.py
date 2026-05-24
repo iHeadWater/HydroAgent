@@ -135,32 +135,55 @@ def main() -> None:
         )
 
         for trial_idx in range(len(task_history) + 1, min(args.max_trials, MAX_TRIALS) + 1):
-            messages = [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": _build_user_prompt(task, attrs, task_history)},
-            ]
-            before = agent.llm.tokens.summary()
-            t_decision = time.time()
-            response = agent.llm.chat(messages)
-            decision_elapsed = time.time() - t_decision
-            after = agent.llm.tokens.summary()
-            raw = response.text or ""
-            data = _json_from_text(raw)
-            decision = MenuDecision(
-                objective=data.get("objective", "NSE"),
-                budget_level=data.get("budget_level", "default"),
-                range_policy=data.get("range_policy", "climate_prior" if not task_history else "default"),
-                stop=bool(data.get("stop", False)),
-                notes=data.get("notes", raw[:200]),
-            ).normalized()
-            token_delta = {
-                "calls": after.get("calls", 0) - before.get("calls", 0),
-                "prompt_tokens": after.get("prompt_tokens", 0) - before.get("prompt_tokens", 0),
-                "completion_tokens": after.get("completion_tokens", 0) - before.get("completion_tokens", 0),
-                "cached_tokens": after.get("cached_tokens", 0) - before.get("cached_tokens", 0),
-                "total_tokens": after.get("total_tokens", 0) - before.get("total_tokens", 0),
-                "decision_elapsed_s": round(decision_elapsed, 3),
-            }
+            # Trial 1 is forced to the default menu so that M2's best-of-N is
+            # always >= M0 (default baseline). This eliminates the failure mode
+            # observed in v1 where the LLM picked climate_prior on trial 1 and
+            # the basin's best NSE stayed below default for the rest of the
+            # budget (e.g. 06885500 stuck at 0.458 < M0 0.505).
+            if trial_idx == 1:
+                decision = MenuDecision(
+                    objective="NSE",
+                    budget_level="default",
+                    range_policy="default",
+                    stop=False,
+                    notes="Trial 1 forced to default as baseline anchor (M2 v2 policy).",
+                ).normalized()
+                token_delta = {
+                    "calls": 0,
+                    "prompt_tokens": 0,
+                    "completion_tokens": 0,
+                    "cached_tokens": 0,
+                    "total_tokens": 0,
+                    "decision_elapsed_s": 0.0,
+                }
+                raw = "[trial 1 forced to default; no LLM call]"
+            else:
+                messages = [
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": _build_user_prompt(task, attrs, task_history)},
+                ]
+                before = agent.llm.tokens.summary()
+                t_decision = time.time()
+                response = agent.llm.chat(messages)
+                decision_elapsed = time.time() - t_decision
+                after = agent.llm.tokens.summary()
+                raw = response.text or ""
+                data = _json_from_text(raw)
+                decision = MenuDecision(
+                    objective=data.get("objective", "NSE"),
+                    budget_level=data.get("budget_level", "default"),
+                    range_policy=data.get("range_policy", "default"),
+                    stop=bool(data.get("stop", False)),
+                    notes=data.get("notes", raw[:200]),
+                ).normalized()
+                token_delta = {
+                    "calls": after.get("calls", 0) - before.get("calls", 0),
+                    "prompt_tokens": after.get("prompt_tokens", 0) - before.get("prompt_tokens", 0),
+                    "completion_tokens": after.get("completion_tokens", 0) - before.get("completion_tokens", 0),
+                    "cached_tokens": after.get("cached_tokens", 0) - before.get("cached_tokens", 0),
+                    "total_tokens": after.get("total_tokens", 0) - before.get("total_tokens", 0),
+                    "decision_elapsed_s": round(decision_elapsed, 3),
+                }
             previous_best = best_record(task_history)
             record = run_trial(
                 method="M2",

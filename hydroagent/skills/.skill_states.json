@@ -28,5 +28,15 @@
     "created_at": "2026-05-24T10:32:30.469869",
     "last_used": "2026-05-24T10:33:52.701048",
     "last_error": null
+  },
+  "explore_calibration_env": {
+    "status": "unverified",
+    "source": "generated",
+    "use_count": 0,
+    "success_count": 0,
+    "fail_count": 0,
+    "created_at": "2026-05-24T21:47:52.032860",
+    "last_used": null,
+    "last_error": null
   }
 }

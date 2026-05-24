@@ -25,7 +25,7 @@ FIGURES_DIR = Path(__file__).resolve().parent / "figures"
 TRAIN_PERIOD = ["2000-01-01", "2009-12-31"]
 TEST_PERIOD = ["2010-01-01", "2014-12-31"]
 OBJECTIVE = "NSE"
-MAX_ITERS = 15
+MAX_ITERS = 30
 NSE_TARGET = 0.80
 
 BASINS: list[dict[str, str]] = [

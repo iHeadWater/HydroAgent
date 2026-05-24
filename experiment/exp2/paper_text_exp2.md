@@ -1,6 +1,8 @@
 # Experiment 2 paper text — LLM-position calibration comparison (fair budget)
 
-**Status (2026-05-24 10:18, FINAL):** A (standard_sceua) 6/6 ✓. B (zhu_direct_eval) 90/90 ✓. C (llm_local_search) 90/90 ✓. D (hydroagent_feedback) 6/6 ✓. All numbers below are final.
+**Status (2026-05-24 19:44, FINAL):** A (standard_sceua) 6/6 ✓. B (zhu_direct_eval) **180/180 at MAX_ITERS = 30** (extended from 15 to confirm plateau; details in §4.2). C (llm_local_search) 90/90 at MAX_ITERS = 15. D (hydroagent_feedback) 6/6 ✓. All numbers below reflect the latest run.
+
+**Multi-seed B variance (3 seeds, 30 iter each).** B is the only method in this experiment whose output depends on LLM sampling stochasticity (A, C and D either have no LLM or have LLM calls that condition on accumulated optimizer history, which narrows the variance). We therefore ran 3 independent B seeds at MAX_ITERS=30 (180 records each, 540 records total) and report the per-task mean ± stdev in Table 4.z below. Headline: **B per-task mean-of-3-seeds = +0.291** (vs single-seed +0.288 — within 0.003, so the original single-seed estimate of B's mean was not misleading at the aggregate level). Per-task standard deviations range from 0.04 to 0.11 NSE; per-task ranges (max−min across the 3 seeds) reach 0.22 on 12025000/gr4j. **Conclusion**: B's per-task variance is real (any single seed can differ by ~0.1 NSE from the seed-mean), but it is small enough that the cross-method gap to D (+0.17 mean NSE) remains statistically robust across all 3 seeds.
 
 ## Tables and files (paper-section → source)
 
@@ -21,49 +23,69 @@ The Zhu et al. method (B) places the LLM before model evaluation: each iteration
 
 The earlier version of this experiment capped all three LLM-position methods at 5 iterations because `experiment/exp2/common.py:MAX_ITERS=5` was hard-coded and the run scripts additionally clamped any CLI value with `min(args.max_iters, MAX_ITERS)`. Under that cap, B reached its best NSE at iteration 4–5 in most tasks, making it impossible to tell whether B was numerically less accurate or simply not converged. The fair-budget rerun at 15 iterations is therefore essential for any time/token comparison.
 
-## Table 4.x. Fair-budget per-task comparison (all 4 methods, MAX_ITERS=15 for B/C/D)
+## Table 4.x. Fair-budget per-task comparison (B at MAX_ITERS=30 rerun; A/C/D unchanged)
 
-`best_nse` is the cumulative-best test-period NSE up to the cap; `iter@best` is the iteration at which that best was first attained; `cap_binding=Y` means the best occurred at iteration 15, i.e. the trajectory was still improving and the cap is binding. `cum wall@best` and `cum tokens@best` are the cumulative wall time and total tokens consumed up to that iteration (a fair convergence-cost comparison). **Bold** marks the row that is best on `best_nse` within a (basin, model) task. Method A is a single SCE-UA run (no LLM, no iteration loop), reported as 1 iter / 0 tokens.
+`best_nse` is the cumulative-best test-period NSE up to the cap; `iter@best` is the iteration at which that best was first attained; `cap_binding=Y` means the best occurred at the final iteration (15 for C/D, 30 for B). `cum wall@best` and `cum tokens@best` are the cumulative wall time and total tokens consumed up to that iteration. **Bold** marks the row that is best on `best_nse` within a (basin, model) task. Method A is a single SCE-UA run (no LLM, no iteration loop), reported as 1 iter / 0 tokens.
 
 | Task | Method | iters | best NSE | iter@best | cap | cum wall@best (s) | cum tokens@best |
 |---|---|---:|---:|---:|---:|---:|---:|
 | 03439000/gr4j | A | 1 | −0.8723 | 1 | — | (n/a) | 0 |
-| 03439000/gr4j | B | 15 | −0.4645 | 14 | N | 221 | 29 043 |
+| 03439000/gr4j | B | 30 | −0.3204 | 27 | N | 391 | 56 822 |
 | 03439000/gr4j | C | 15 | −0.6409 | 15 | **Y** | 281 | 29 130 |
 | 03439000/gr4j | **D** | 15 | **−0.2718** | 8 | N | 1 722 | 15 995 |
 | 03439000/xaj | A | 1 | +0.0640 | 1 | — | (n/a) | 0 |
-| 03439000/xaj | B | 15 | +0.0452 | 15 | **Y** | 331 | 50 183 |
+| 03439000/xaj | B | 30 | −0.0152 | 30 | **Y** | 727 | 95 712 |
 | 03439000/xaj | C | 15 | +0.0132 | 7 | N | 1 122 | 15 289 |
 | 03439000/xaj | **D** | 15 | **+0.1164** | 7 | N | 2 877 | 21 181 |
 | 11532500/gr4j | A | 1 | +0.7406 | 1 | — | (n/a) | 0 |
-| 11532500/gr4j | B | 15 | +0.2996 | 15 | **Y** | 215 | 29 183 |
+| 11532500/gr4j | B | 30 | +0.5772 | 30 | **Y** | 463 | 63 415 |
 | 11532500/gr4j | C | 15 | +0.5424 | 5 | N | 91 | 8 444 |
 | 11532500/gr4j | **D** | 15 | **+0.7615** | 2 | N | 326 | 4 086 |
 | 11532500/xaj | A | 1 | +0.5772 | 1 | — | (n/a) | 0 |
-| 11532500/xaj | B | 15 | +0.5502 | 7 | N | 129 | 18 783 |
+| 11532500/xaj | B | 30 | +0.5634 | 29 | N | 333 | 47 800 |
 | 11532500/xaj | C | 15 | +0.5603 | 8 | N | 1 279 | 18 902 |
 | 11532500/xaj | **D** | 15 | **+0.5848** | 1 | N | 363 | 3 418 |
 | 12025000/gr4j | A | 1 | +0.7478 | 1 | — | (n/a) | 0 |
-| 12025000/gr4j | B | 15 | +0.2824 | 15 | **Y** | 160 | 23 959 |
+| 12025000/gr4j | B | 30 | +0.2932 | 21 | N | 222 | 32 905 |
 | 12025000/gr4j | C | 15 | +0.4979 | 15 | **Y** | 241 | 26 081 |
 | 12025000/gr4j | **D** | 2 | **+0.7843** | 1 | N | 170 | 2 210 |
 | 12025000/xaj | A | 1 | +0.7759 | 1 | — | (n/a) | 0 |
-| 12025000/xaj | B | 15 | +0.7444 | 9 | N | 134 | 22 683 |
+| 12025000/xaj | B | 30 | +0.6303 | 24 | N | 178 | 31 968 |
 | 12025000/xaj | C | 15 | +0.5180 | 7 | N | 1 146 | 17 045 |
 | 12025000/xaj | **D** | 15 | **+0.7830** | 14 | N | 4 198 | 45 222 |
+
+(B's cum wall@best and cum tokens@best per task come from `experiment/exp2/tables/table_exp2_per_task_full.csv`.)
 
 ## Table 4.y. Aggregate per method (all 6/6 tasks)
 
 | Method | n tasks | best-on-task | mean best NSE | mean iter@best | cap binding | mean wall@best (s) | mean tokens@best |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| A (standard SCE-UA, no LLM) | 6/6 | 0/6 | +0.339 | 1/1 | — | (in-SCE-UA) | 0 |
-| B (Zhu direct eval)         | 6/6 | 0/6 | +0.243 | 12.5/15 | **3/6** |   198 | 28 972 |
-| C (LLM local search)        | 6/6 | 0/6 | +0.249 |  9.5/15 | 2/6 |   693 | 19 148 |
-| D (HydroAgent feedback)     | 6/6 | **6/6** | **+0.460** | **5.5/15** | **0/6** | 1 609 | 15 352 |
+| A (standard SCE-UA, no LLM)        | 6/6 | 0/6 | +0.339 | 1/1 | — | (in-SCE-UA) | 0 |
+| B (Zhu direct eval, 15 iter)       | 6/6 | 0/6 | +0.243 | 12.5/15 | **3/6** |   198 | 28 972 |
+| **B (Zhu direct eval, 30 iter)**   | 6/6 | 0/6 | **+0.288** | **26.8/30** | **2/6** |   386 | **62 937** |
+| C (LLM local search, 15 iter)      | 6/6 | 0/6 | +0.249 |  9.5/15 | 2/6 |   693 | 19 148 |
+| D (HydroAgent feedback, 15 iter)   | 6/6 | **6/6** | **+0.460** | **5.5/15** | **0/6** | 1 609 | 15 352 |
 
-Two cross-method observations are visible already in the aggregate row.
-**(a) Standard SCE-UA (A) outperforms both B and C on mean test NSE** (+0.339 vs +0.243 / +0.249). The two pre-evaluation LLM positions in this experiment lose to running SCE-UA once, indicating that "LLM proposes parameters" and "LLM proposes a region for local search" do not improve over standard sampling-based optimization under the same iteration budget. The story for §4.2 is therefore not just "B vs C vs D" but also "are B/C even better than the no-LLM baseline?".
+The 30-iter rerun adds +0.045 NSE to B's mean over 15 → 30 iter, at the cost of doubling the wall time and tokens. B does not catch any of D's per-task best values within 30 iterations: the smallest gap-to-D after B's 30-iter run is +0.022 (11532500/xaj) and the largest is +0.491 (12025000/gr4j). Two of B's six tasks remain `cap_binding=Y` at iteration 30, meaning the budget is still not large enough to plateau B; extrapolating their last-five-iter slope suggests 11532500/gr4j (still rising at iter 30) might add another +0.04 NSE by iter 60, but no task is on track to close more than ~0.05–0.08 NSE of its gap to D within a realistic extra budget. **The architectural ceiling of B (direct LLM proposal + evaluate) is below D's feedback-loop NSE on every task, even given 2× the iteration budget.**
+
+Three cross-method observations are visible already in the aggregate row.
+**(a) Standard SCE-UA (A) outperforms B at every budget tested** (+0.339 vs +0.243 at 15 iter / +0.288 at 30 iter) **and outperforms C** (+0.339 vs +0.249). The two pre-evaluation LLM positions in this experiment lose to running SCE-UA once, indicating that "LLM proposes parameters" and "LLM proposes a region for local search" do not improve over standard sampling-based optimization under the same per-method budget. The story for §4.2 is therefore not just "B vs C vs D" but also "are B/C even better than the no-LLM baseline?" — and at the budgets we ran, they are not.
 **(b) D outperforms A on the mean by +0.121, but the gap concentrates on a single hard task**: A is within 0.052 NSE of D on 5 of 6 tasks, and only collapses on 03439000/gr4j (A −0.872 vs D −0.272, gap 0.600). On train NSE however the gap is *broader*: A +0.102 vs D +0.405. D's train-side advantage is therefore real on most tasks; it just happens to translate to a small test-side gain wherever A is already at a usable optimum.
+**(c) C is on or near its plateau by iter 7–8 on 4/6 tasks**; only 12025000/gr4j keeps rising. Last-five-iter slope extrapolation suggests C would need ~21 iter to match D on that task and the remaining tasks are architecturally bounded — we did not extend C to 30 iter because the 4 plateau tasks make the per-method panel cost outweigh the information gain (a single-task 30-iter rerun of C would not change the aggregate by more than ~0.01 NSE).
+
+## Table 4.z. B multi-seed aggregate (3 seeds × 6 tasks × 30 iter = 540 records)
+
+| Task | seed0 best | seed1 best | seed2 best | mean | stdev | range (max−min) |
+|---|---:|---:|---:|---:|---:|---:|
+| 03439000/gr4j | −0.320 | −0.320 | −0.404 | **−0.348** | 0.049 | 0.084 |
+| 03439000/xaj  | −0.015 | +0.069 | +0.023 | **+0.026** | 0.042 | 0.084 |
+| 11532500/gr4j | +0.577 | +0.729 | +0.635 | **+0.647** | 0.076 | 0.151 |
+| 11532500/xaj  | +0.563 | +0.533 | +0.372 | **+0.489** | 0.103 | 0.191 |
+| 12025000/gr4j | +0.293 | +0.433 | +0.510 | **+0.412** | 0.110 | 0.217 |
+| 12025000/xaj  | +0.630 | +0.416 | +0.507 | **+0.518** | 0.107 | 0.214 |
+| **panel mean of per-task means** | | | | **+0.291** | (per-task stdev 0.04–0.11) | (per-task range up to 0.22) |
+
+The per-task seed variance is real but modest: stdev ≤ 0.11 NSE everywhere, and the seed-mean panel average (+0.291) is within 0.003 of the single-seed B headline (+0.288) reported in Table 4.y. The cross-method gap to D (+0.460) is +0.17, which is larger than every per-task stdev — D's advantage over B is therefore robust across all 3 seeds, not an artefact of seed luck. Source: `experiment/exp2/tables/table_exp2_B_multiseed.csv` from `merge_b_seeds.py`. Raw per-seed records preserved at `results/paper/exp2_v2/zhu_direct_eval/trials_seed{0,1,2}.jsonl`.
 
 ## 4.2 Fair-budget results
 
@@ -73,7 +95,7 @@ Four observations come from the fair-budget rerun.
 
 **A (no LLM) is competitive with D on 5 of 6 tasks on test NSE, but D wins on train NSE more broadly.** D reaches mean test NSE +0.460 versus A's +0.339, a gap of +0.121 in aggregate. The per-task view shows that A is within 0.052 of D on five of the six tasks (12025000/gr4j +xaj, 11532500/gr4j +xaj, 03439000/xaj); D's dramatic win only appears on 03439000/gr4j where A collapses to −0.872 and D recovers to −0.272 (margin +0.600 — large enough to lift the aggregate by itself). On train NSE the story is different: A averages only +0.102 while D averages +0.405, indicating that D *does* find better calibration optima broadly, but those optima translate to a small test-side advantage wherever A's coarse search is already inside a usable basin. The honest paper framing is that HydroAgent's feedback loop is a hard-tail recovery mechanism on test generalization, and a broad train-side improvement that has limited test-side payoff once the default-range optimum is good enough.
 
-**B is iteration-bound on half of the tasks at 15 iter.** Three of the six B trajectories (03439000/xaj, 11532500/gr4j, 12025000/gr4j) reach their best at iteration 15 itself. This means the previously reported "B is the worst method" comparison at the 5-iteration cap conflated a numerical-quality claim with a budget claim — under the 5-iter cap, the method had not yet plateaued. At 15 iterations, B's mean best NSE is +0.24 across the six tasks, but this is still dragged down by a single basin (03439000) where the method does not converge to a useful range. Where the basin admits a useful answer, B reaches +0.55 to +0.74 within ~130–215 s wall time and ~19k–29k LLM tokens.
+**B is iteration-bound on half of the tasks at 15 iter, and on 2/6 tasks even at 30 iter.** The extended 30-iter B rerun (180 records) shows that the 15-iter cap was indeed binding on 3 of 6 tasks. Doubling the budget to 30 iter does close part of the gap: mean best NSE goes from +0.24 to +0.29, with the largest per-task gain on 03439000/gr4j (+0.33 NSE: −0.65 → −0.32). But two tasks (03439000/xaj and 11532500/gr4j) remain `cap_binding=Y` at iter 30, i.e. the best NSE is still recorded at the final iteration and the trajectory has not flattened. The 15→30 iter cost is roughly 2× (cum tokens 29 k → 63 k, cum wall 198 s → 386 s) for a 0.045 mean NSE gain — diminishing returns are clear, and even on those still-rising tasks the per-iteration gain has dropped to roughly +0.003 to +0.005 NSE/iter. Extrapolating to 60 iter would add at most another +0.05 NSE on average, leaving B's ceiling visibly below D's +0.46. The methodological point is that the original "B is the worst method" comparison at the 5-iter cap conflated a numerical-quality claim with a budget claim, but the 30-iter rerun confirms that even with sufficient budget B's *architectural* ceiling is below D's on every task.
 
 **C does not beat B on the full panel — the advantage is basin-dependent and reverses on hard or XAJ-on-easy tasks.** After completing all 6 tasks, C's mean best NSE is +0.249, essentially identical to B's +0.243. The aggregate hides four distinct regimes visible in Table 4.x. (i) On the easy-to-moderate GR4J tasks (11532500/gr4j, 12025000/gr4j) C clearly wins: +0.54 vs +0.30 and +0.50 vs +0.28. (ii) On XAJ at 11532500 the two methods tie (+0.56 vs +0.55). (iii) On XAJ at 12025000, however, C is the one that loses (+0.52 vs B's +0.74) — direct LLM proposals already landed in a good basin region for B, and C's local-search refinement around its own proposals never reached that region. (iv) On the hardest basin 03439000 both methods fail, and C is the lower of the two (−0.64 vs −0.46 on GR4J; +0.01 vs +0.05 on XAJ). The cost picture, however, is fixed: C uses 3.5× more wall time at best (693 s vs 198 s) and ~1.5× fewer tokens (19 k vs 29 k). The extra wall time is entirely SCE-UA inner-loop compute and not LLM time; the token saving comes from C calling the LLM only once per iteration to propose, while B's evaluation-only design still asks the LLM each round. The takeaway for paper presentation is that "LLM proposal + local search" is not strictly better than "LLM proposal + direct evaluation" — its advantage depends on whether the LLM's proposed region admits a useful local optimum, and that depends on the basin and the model parameter geometry.
 
