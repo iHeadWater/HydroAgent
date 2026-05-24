@@ -40,8 +40,10 @@ Basin list is in `experiment/exp1/common.py:BASINS`. XAJ is excluded because the
 
 **Paper materials.**
 - README: `experiment/exp1/README.md`
-- **Paper-text draft: `experiment/exp1/paper_text_exp1.md`** (M0/M2 final + open slots for M1/M3).
-- Tables: `experiment/exp1/tables/` (re-compiled 2026-05-24 10:30 with M0+M2 data).
+- **Paper-text draft: `experiment/exp1/paper_text_exp1.md`** (M0/M2 final + open slots for M1/M3). Contains a "Tables and files" mapping section explaining the median-vs-best discrepancy between `table2_core_results.csv` (median) and the in-text Table 3.2 (best).
+- Tables: `experiment/exp1/tables/`
+  - `table_exp1_per_trial.csv` (30 rows now; per-method per-basin per-trial cost + menu choice + metrics + boundary_hits). Built by `experiment/exp1/build_per_trial_table.py`; rerun after M1/M3 to extend.
+  - `table1_methods.csv`, `table2_core_results.csv` (median NSE), `tableS1_task_level_results.csv` (compile pipeline outputs).
 - Figures: `experiment/exp1/figures/` — figures pending; basin trajectory + cost scatter to be generated when M1/M3 arrive.
 - Raw records: `results/paper/exp1_v2/<method>/trials.jsonl`.
 

@@ -1,4 +1,16 @@
-# Experiment 4 paper text template
+# Experiment 4 paper text
+
+## Tables and files (paper-section → source)
+
+| Reference in this text | File | Row/column meaning |
+|---|---|---|
+| Table 4.8 (tool conditions + boundary scenarios) | `experiment/exp4/tables/table_exp4_tool_conditions.csv` | One row per condition (B0/B1/B2/B3) with `allowed_tools`, `observed_tool_schemas`, `allows_execution`, `allows_dynamic_generation`. Scenario definitions are in the run script `experiment/exp4/common.py:SCENARIOS`. |
+| Table 4.9 (failure modes per condition) | `experiment/exp4/tables/table_exp4_failure_modes.csv` | One row per condition (n=12 = 4 scenarios × 3 repeats). Columns: `task_success_rate`, `controlled_failure_rate`, `information_missing_rate`, `missing_tool_rate`, `logic_error_rate`, `hallucination_rate`, `fabricated_tool_rate`, `wrong_tool_route_rate`, `ask_user_rate`, `create_skill_rate`, `recovery_success_rate`, `mean_recovery_turns`, `mean_recovery_tokens`, `mean_llm_calls`, `mean_tool_calls`, `mean_prompt_tokens`, `mean_completion_tokens`, `mean_cached_tokens`, `mean_total_tokens`, `mean_wall_time_s`, `mean_tool_compute_time_s`, `mean_llm_decision_time_s`. |
+| Scenario × condition breakdown | `experiment/exp4/tables/table_exp4_recovery_cost.csv` | One row per (scenario, condition). Use when discussing scenario-specific aversion such as "S2 is 0/3 for B2 and B3". |
+| Every individual run | `experiment/exp4/tables/tableS_exp4_trial_records.csv` | 48 rows. Per-trial fields including `prompt_tokens`, `completion_tokens`, `cached_tokens`, `total_tokens`, `wall_time_s`, `tool_compute_time_s`, `llm_decision_time_s`, `actual_tools`, all failure-mode booleans. **Each row is one complete agent run**; there is no per-iteration table because each boundary scenario is one agent invocation, not an iterated calibration loop. |
+| Fig 4.7 failure mode composition | `experiment/exp4/figures/fig_exp4_failure_mode_stack.png` | Stacked bar of failure modes per condition; the 75% B0 hallucination band and the B3 wrong-route climb are visible. |
+| Fig 4.8 recovery cost | `experiment/exp4/figures/fig_exp4_recovery_cost.png` | Token/turn cost of B2/B3 create_skill attempts (most slots empty because B2 never invoked it and B3 invoked it 4/12 times). |
+| Raw records | `results/paper/exp4_v2/trial_records.jsonl`, per-run dirs in `results/paper/exp4_v2/runs/<condition>_<scenario>_<repeat>/`. Dynamically generated skills under `hydroagent/skills/check_environment/`, `explore_environment/`, `write_script_file/` are paper artifacts of B3's `create_skill` invocations. |
 
 ## 3.2.4 Capability boundary and controlled failure experiment
 

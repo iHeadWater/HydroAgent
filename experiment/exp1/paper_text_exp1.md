@@ -2,6 +2,16 @@
 
 **Status (2026-05-24 10:30):** M0 (default_script) 5/5 ✓. M2 (hydroagent_menu, 5 trials per basin) 25/25 ✓. M1 (human_runner) reserved for the human operator; M3 (random_menu) not yet run. Numbers below are final for M0 and M2.
 
+## Tables and files (paper-section → source)
+
+| Reference in this text | File | Row/column meaning |
+|---|---|---|
+| Table 3.1 (basin panel) | inline above; derived from `results/paper/exp1_v2/screen/screen_trials.jsonl` | One row per selected basin; NSE column is the default-range quick-budget GR4J test NSE from the 60-basin screen pass. |
+| Table 3.2 (M0 vs M2 best NSE) | `experiment/exp1/tables/table_exp1_per_trial.csv` (rows where `method = M0` for the M0 column; rows where `method = M2` aggregated per basin for `M2 best` and `M2 mean`) | "M0 default" column = `test_NSE` of the M0 row for that basin. "M2 best" = max of `test_NSE` over the 5 M2 trials of that basin (excluding null rows). "M2 mean" = mean of the same set including only successful trials. |
+| (paper-section auto-table) compile_results.py output: `experiment/exp1/tables/table2_core_results.csv` | same csv | Uses **median** test NSE per method, not best — that's why M2's number there (0.480) differs from M2 best (0.532). The paper text uses best because the experimental design is "best of 5 trials"; the compile-script median is reported separately as a sensitivity check. |
+| Per-trial cost / menu / metric breakdown | `experiment/exp1/tables/table_exp1_per_trial.csv` | One row per (method, basin, trial). Columns: `objective`, `budget_level`, `range_policy`, `stop_flag`, `notes`, train+test NSE+KGE, prompt/completion/cached/total tokens, `llm_decision_time_s`, `wall_time_s`, `active_seconds`, `boundary_hits`, `error`. |
+| Methods table | `experiment/exp1/tables/table1_methods.csv` | One row per method with controller type, max trials, and what each method controls. |
+
 ## 3.2.1 Token-for-time calibration
 
 Experiment 1 isolates the value of having an LLM choose calibration hyperparameters under a fixed menu (objective in {NSE, KGE, LOGNSE}, budget in {quick, default, deep}, range policy in {default, climate_prior, wide, boundary_expand}). The agent never writes parameters or computes metrics directly: it only selects a menu entry, hydromodel runs SCE-UA, and the agent observes train/test NSE/KGE plus any boundary-hit signals before deciding the next menu.

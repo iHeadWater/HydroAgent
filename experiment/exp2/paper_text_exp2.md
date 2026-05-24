@@ -2,6 +2,19 @@
 
 **Status (2026-05-24 10:18, FINAL):** A (standard_sceua) 6/6 ✓. B (zhu_direct_eval) 90/90 ✓. C (llm_local_search) 90/90 ✓. D (hydroagent_feedback) 6/6 ✓. All numbers below are final.
 
+## Tables and files (paper-section → source)
+
+| Reference in this text | File | Row/column meaning |
+|---|---|---|
+| Table 4.x (per-task fair-budget) | `experiment/exp2/tables/table_exp2_fair_compare.csv` | One row per (basin, model, method). Columns include `best_nse` (cumulative-best test NSE up to the cap), `iter_at_best`, `cap_binding` (Y/N), `cum_wall_at_best_s`, `cum_tok_at_best`. Same content also reproduced in `table_exp2_per_task_full.csv` with train+test NSE+KGE and `cum_llm_t_at_best_s` / `cum_hydromodel_t_at_best_s` split. |
+| Table 4.y (aggregate per method) | `experiment/exp2/tables/table_exp2_method_aggregate_full.csv` | One row per method (A/B/C/D). Columns `mean_best_test_NSE`, `stdev_best_test_NSE`, `mean_best_train_NSE`, `mean_best_test_KGE`, `mean_best_train_KGE`, `mean_iter_at_best`, `n_cap_binding`, `mean_cum_wall_at_best_s`, `mean_cum_tokens_at_best`, `mean_cum_llm_t_at_best_s`, `mean_cum_hydromodel_t_at_best_s`. |
+| Per-iteration trajectory (numerical form of Fig 4.4) | `experiment/exp2/tables/table_exp2_per_iter_trajectory.csv` | 263 rows. One row per (method, basin, model, iteration). Columns include train+test NSE+KGE, prompt/completion/cached/total tokens, `wall_time_s`, `llm_decision_time_s`, `hydromodel_compute_time_s`, `best_so_far_test_NSE`. D rows have `_d_per_iter_is_approx = True` because D's per-round token/time fields are reconstructed by linear allocation of the total (the raw record stores per-method totals, not per-round). |
+| Compile-pipeline core table | `experiment/exp2/tables/table44_core_results.csv` | Wide format: one row per (basin, model) with A/B/C/D columns side-by-side, all cross-method deltas. Convenient for the cross-method bar chart (Fig 4.3). |
+| Process evidence for D | `experiment/exp2/tables/table45_hydroagent_process_evidence.csv` | One row per (basin, model) D run with `basin_attributes_used`, `basin_aware_init`, `first_sceua_boundary_hit`, `diagnostic_response_match`, `revised_search_improved`, `stop_reason`. Use when discussing why D wins on hard tasks. |
+| Method definitions and budget tables | `table43_methods.csv` | Method/position/numeric-action/max_rounds/cost-record schema. |
+| Fig 4.3 method comparison bars | `experiment/exp2/figures/fig43_method_comparison.png` | 4-method (A/B/C/D) test NSE + test KGE bars per task. **Regenerated 2026-05-24 with 15-iter B/C and A baseline included.** |
+| Fig 4.4 search trajectories | `experiment/exp2/figures/fig44_search_trajectories.png` | B/C/D test NSE at the train-NSE-best parameter, vs LLM iteration. A is a single run so not on this figure (its mean +0.339 would appear as a horizontal reference line if added). |
+
 ## 3.2.2 LLM-position calibration with a fair iteration budget
 
 The Zhu et al. method (B) places the LLM before model evaluation: each iteration it proposes one parameter vector which is directly evaluated by the hydrological model. Variant C inserts the LLM before a local optimizer that searches a tight window around each LLM proposal. Variant D, HydroAgent's feedback loop, places the LLM after basin attributes and after SCE-UA feedback so that range/budget can be revised between full SCE-UA runs. The standard SCE-UA baseline A uses no LLM. All four methods are constrained by the same iteration budget (MAX_ITERS = 15) and the same train/test split (2000–2009 / 2010–2014) on the same 6 tasks (3 basins × {GR4J, XAJ}).
