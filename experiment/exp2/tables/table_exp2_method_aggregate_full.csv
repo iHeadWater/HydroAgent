@@ -1,0 +1,5 @@
+method,n_tasks,mean_best_test_NSE,stdev_best_test_NSE,mean_best_train_NSE,mean_best_test_KGE,mean_best_train_KGE,mean_iter_at_best,n_cap_binding,mean_cum_wall_at_best_s,mean_cum_tokens_at_best,mean_cum_llm_t_at_best_s,mean_cum_hydromodel_t_at_best_s
+A,6,0.339,0.6509,0.102,0.3948,0.4597,1.0,0,0.0,0,0.0,229.5667
+B,6,0.2429,0.4219,0.0577,0.2633,0.3349,12.5,3,198.3167,28972,192.0667,6.2667
+C,6,0.2485,0.4826,0.0446,0.2288,0.3762,9.5,2,693.2167,19148,129.3333,563.8667
+D,6,0.4597,0.4403,0.4046,0.4543,0.5438,5.5,0,1609.35,15350,86.7833,1522.4

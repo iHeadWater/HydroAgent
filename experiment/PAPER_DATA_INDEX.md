@@ -24,24 +24,25 @@ LLM backend: DeepSeek `deepseek-v4-flash` for every agent run. DiagScore rater (
 
 Basin list is in `experiment/exp1/common.py:BASINS`. XAJ is excluded because the screen produced only one XAJ medium-difficulty candidate.
 
-**Current data status (in-progress, started 2026-05-24 09:34).**
+**Current data status.**
 
-| Method | Status | Records expected | Notes |
+| Method | Status | Records | Notes |
 |---|---|---:|---|
-| M0 default_script         | running in background, ETA ~5 min  | 5 | `results/paper/logs/exp1_M0.log` |
-| M1 human_runner           | not started — operator-driven      | 5 | user will run manually |
-| M2 hydroagent_menu        | running in background, ETA ~25 min | 25 (5 trials × 5 basins) | `results/paper/logs/exp1_M2.log` |
-| M3 random_menu            | not started                        | (5 × n_repeats) | optional, run after M0/M2 finish |
+| M0 default_script         | ✓ done | 5/5 | default menu, single run per basin |
+| M1 human_runner           | not started — operator-driven | 5 | user will run manually |
+| M2 hydroagent_menu        | ✓ done | 25/25 | 5 LLM-chosen menu trials per basin |
+| M3 random_menu            | not started | — | optional, lower-bound reference |
 
-Stale pre-screen records (single 12025000/xaj entry from earlier prototyping) were moved to `results/paper/exp1_v2_pre_screened/` before the new runs began.
-
-**Evidence vs README.** Cannot evaluate yet — methods are still running. Conclusion-shaped questions (token-for-time, directional-vs-random) will only be answerable after at least M0 + M2 + M1 are populated.
+**Evidence vs README.** Two paper-grade findings already from M0/M2 alone (M1 + M3 will extend, not overturn):
+- **M2 never beats M0 in best test NSE on any of the 5 medium basins.** Best of 5 LLM trials matches M0 on 4 basins, and is 0.047 NSE *worse* on 1 basin (06885500). M2 mean across 5 trials is below M0 default on every basin. Token cost is paid for no NSE gain.
+- **On every basin, the LLM's 5th trial sets `stop = True`** with an explicit "default is the best you'll get" rationale (e.g. 06885500: "Remaining trials unlikely to improve given pattern; stop to avoid wasting budget"). 3 of 25 trials returned null metrics from over-aggressive `boundary_expand` / `wide` / `LOGNSE` menu choices. The recoverable contribution from menu tuning on medium-difficulty basins is therefore zero, and the LLM eventually recognises this.
+- Reframing: this is consistent with §4.2 (exp2) and §4.4 (exp4) — LLM agents add little to easy/medium tasks, and the value lives on the hard tail.
 
 **Paper materials.**
 - README: `experiment/exp1/README.md`
-- Paper-text draft: **not yet written** — pending M0/M1/M2 data.
-- Tables: `experiment/exp1/tables/` (currently has stale headers from prior run; will be overwritten by `compile_results.py` once data is in).
-- Figures: `experiment/exp1/figures/` (currently empty except a stale `figS1_token_breakdown.png`).
+- **Paper-text draft: `experiment/exp1/paper_text_exp1.md`** (M0/M2 final + open slots for M1/M3).
+- Tables: `experiment/exp1/tables/` (re-compiled 2026-05-24 10:30 with M0+M2 data).
+- Figures: `experiment/exp1/figures/` — figures pending; basin trajectory + cost scatter to be generated when M1/M3 arrive.
 - Raw records: `results/paper/exp1_v2/<method>/trials.jsonl`.
 
 ---
@@ -56,13 +57,14 @@ Stale pre-screen records (single 12025000/xaj entry from earlier prototyping) we
 
 | Method | Records | Status |
 |---|---:|---|
-| A standard_sceua          | (running, ETA ~6 min) | started 2026-05-24 09:34, `results/paper/logs/exp2_A.log` |
+| A standard_sceua          | **6/6 ✓** | done 09:57 (one record per (basin,model), no iteration loop — `wall_time_s` field is 0 because A's wall time lives inside the single SCE-UA run) |
 | B zhu_direct_eval         | 90/90 ✓ | full 15-iter rerun complete |
 | C llm_local_search        | 90/90 ✓ | full 15-iter rerun complete |
 | D hydroagent_feedback     |  6/6  ✓ | full 15-iter rerun complete |
 
 **Evidence vs README.** README hypothesizes "B fast but weaker, C improves B, D most stable but expensive". Evidence:
-- **D is best-on-task on 6/6 tasks**, mean best NSE +0.460 vs B +0.243 and C +0.249. ✓ supports "D is the main HydroAgent contribution".
+- **D is best-on-task on 6/6 tasks** *among the LLM-position methods*, mean best NSE +0.460 vs B +0.243, C +0.249.
+- **But A (zero-LLM baseline) is within 0.05 NSE of D on 5/6 tasks.** A reaches +0.748, +0.776, +0.741, +0.577, +0.064 on basins 12025000, 11532500, and 03439000/xaj; D matches or exceeds those by only +0.007 to +0.052. The D-vs-A aggregate gap (+0.46 vs +0.17) is dominated by a single hard task (03439000/gr4j: A −0.872 → D −0.272, recovery margin 0.60). This re-frames the paper claim: HydroAgent is a hard-tail recovery layer, not a categorical improvement over standard SCE-UA.
 - **B ≈ C** (mean +0.243 vs +0.249). ✗ contradicts "C improves B" — C's local-search refinement adds 3.5× wall time but no NSE on the full panel.
 - **D is *not* more expensive in tokens** (mean tokens-at-best 15 k vs B's 29 k). ✗ contradicts "D ... costs more tokens". D *is* more expensive in wall time (1 609 s vs B's 198 s at best).
 - **D's early-stop is wasted on 5/6 tasks**: NSE plateaus below the fixed `NSE_TARGET = 0.80`, so `stop_reason = max_rounds` fires anyway. Honest dark-side finding; preserved in the draft.
@@ -113,22 +115,24 @@ Stale pre-screen records (single 12025000/xaj entry from earlier prototyping) we
 
 **Question.** When a task crosses the current tool boundary, does the agent fail in a predictable way, or does it invent tools, misuse available tools, or fabricate results?
 
-**Tasks.** 3 tool conditions (B0 basic tools / B1 full toolchain / B2 basic + create_skill + run_code) × 4 boundary scenarios (S1 missing basin id / S2 missing calibration tools / S3 wrong-route risk / S4 out-of-scope MCMC) × 3 repeats = 36 records.
+**Tasks.** 4 tool conditions (B0 basic tools / B1 full toolchain / B2 basic + create_skill + run_code / B3 = B2 + explicit prompt policy "if tool missing, call create_skill") × 4 boundary scenarios (S1 missing basin id / S2 missing calibration tools / S3 wrong-route risk / S4 out-of-scope MCMC) × 3 repeats = 48 records.
 
-**Current data status.** 36/36 records ✓. The compile pipeline reads `results/paper/exp4_v2/trial_records.jsonl`; the canonical 36-record dataset (after judge fixes) was repointed here on 2026-05-24 from `results/paper/exp4_v2_baseline/`. Tables and figures re-compiled 2026-05-24 09:14.
+**Current data status.** 48/48 records ✓. B3 added 2026-05-24 to test the policy-gap explanation for B2's 0% create_skill use. Tables + figures re-compiled 2026-05-24 10:38.
 
 **Headline numbers** (`experiment/exp4/tables/table_exp4_failure_modes.csv`, n = 12 per condition):
 
-| Condition | Success | Controlled failure | Hallucination | Fabricated tool | create_skill called | wrong_tool_route |
+| Condition | Success | Controlled failure | Hallucination | Wrong route | ask_user | **create_skill** |
 |---|---:|---:|---:|---:|---:|---:|
-| B0 basic tools           | 0.0%  | 25.0% | **75.0%** | 8.3% | 0.0% | 0.0%  |
-| B1 full toolchain        | **58.3%** | 8.3%  | 8.3%  | 0.0% | 8.3% | 33.3% |
-| B2 basic + create_skill  | 0.0%  | 33.3% | 41.7% | 0.0% | **0.0%** | 0.0% |
+| B0 basic tools                                | 0.0%  | 25.0% | **75.0%** | 0.0%  | 8.3% | 0.0% |
+| B1 full toolchain                             | **58.3%** | 8.3% | 8.3% | 33.3% | 25.0% | 8.3% |
+| B2 basic + create_skill (no policy hint)      | 0.0% | 33.3% | 41.7% | 25.0% | 33.3% | **0.0%** |
+| B3 B2 + explicit "use create_skill" policy    | **0.0%** | 33.3% | 25.0% | **41.7%** | 0.0% | **33.3%** |
 
 **Evidence vs README.** README predicts "B0 fails safely (controlled)" and "B2 tests dynamic recovery". Evidence inverts both — these are stronger paper findings, captured in the draft:
 - **B0 hallucinates 75% of the time, not "fails safely".** Without execution tools, the agent narrates plausible NSE/KGE values 9× more often than B1 does. The dominant cause of hydrological hallucination in this setting is *the absence of an executable grounding step*, not the LLM's confidence.
-- **B2 `create_skill_rate = 0/12` and `success_rate = 0%`.** Even with the meta-tool explicitly enabled (and the scenarios designed to need it), the agent never invokes it and never recovers. Giving an agent a meta-tool is not the same as giving it the policy to use that meta-tool — this is the next behavioural gap.
-- **B1 `wrong_tool_route = 33.3%`** versus B0's 0%. Tool richness introduces a new failure mode (routing errors that did not exist under B0). B1's improvement is real but partial.
+- **B2 `create_skill_rate = 0/12` and `success_rate = 0%`.** Even with the meta-tool explicitly enabled (and the scenarios designed to need it), the agent never invokes it and never recovers.
+- **B3 closes the policy gap partly but not the success gap.** Adding "if tool missing, call create_skill" to the system prompt raises create_skill_rate from 0/12 to 4/12 (33.3%) and drops hallucination 41.7%→25.0%, but task_success stays at 0/12. The scenarios where create_skill is most needed (S2 missing calibration tools, S4 out-of-scope MCMC) are the ones where the agent still won't or can't generate a useful skill: even when invoked, the few-shot generated tools cannot reconstruct the blocked hydromodel/MCMC capability. The conclusion is that giving a meta-tool + policy is necessary but very far from sufficient; the next research direction is a calibrated decision boundary for when create_skill can plausibly recover.
+- **B1 `wrong_tool_route = 33.3%`** versus B0's 0%. Tool richness introduces a new failure mode (routing errors that did not exist under B0). B3 pushes wrong-route even higher (41.7%) because the explicit policy redirects effort that B2 spent on `ask_user` into unproductive code generation.
 
 **Paper materials.**
 - README: `experiment/exp4/README.md` (note: the "fails safely" framing should be revised; the draft already inverts to the evidence-based framing).

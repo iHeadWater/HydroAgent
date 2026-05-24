@@ -66,6 +66,26 @@ CONDITIONS = [
         "allows_execution": True,
         "allows_dynamic_generation": True,
     },
+    {
+        # B3 closes the policy gap that B2 exposed (create_skill_rate=0/12):
+        # same tools as B2, but the system prompt explicitly instructs the
+        # agent to call create_skill when a required tool is absent. If B3 also
+        # rate=0, the policy gap is intrinsic to the model not the prompt
+        # surface area.
+        "condition_id": "B3",
+        "condition_name": "basic_plus_create_skill_with_policy",
+        "description": "Same tool set as B2; system prompt explicitly tells the agent to invoke create_skill when a required tool is unavailable.",
+        "allowed_tools": BASIC_CREATE_TOOLS,
+        "allows_execution": True,
+        "allows_dynamic_generation": True,
+        "prompt_addendum": (
+            "IMPORTANT POLICY: If the task requires a tool that is not in your tool list, "
+            "you MUST call `create_skill` to generate a new tool that fills the gap, then "
+            "use `run_code` to invoke it. Do not narrate a plausible result without an "
+            "executed grounding step. If you cannot satisfy the request even after creating "
+            "a skill, state clearly which capability is missing."
+        ),
+    },
 ]
 CONDITION_BY_ID = {c["condition_id"]: c for c in CONDITIONS}
 
@@ -262,7 +282,10 @@ def apply_tool_condition(agent, condition_id: str) -> Iterator[dict[str, Any]]:
     try:
         agent.tools = {k: v for k, v in agent.tools.items() if k in allowed}
         agent.tool_schemas = filter_tool_schemas(agent.tool_schemas, allowed)
-        agent._system_prompt_override = MINIMAL_SYSTEM_PROMPT
+        prompt = MINIMAL_SYSTEM_PROMPT
+        if condition.get("prompt_addendum"):
+            prompt = prompt + "\n\n" + condition["prompt_addendum"]
+        agent._system_prompt_override = prompt
         agent._prompt_mode = "minimal"
         agent._inject_adapter_docs = False
         agent._inject_policies = False
