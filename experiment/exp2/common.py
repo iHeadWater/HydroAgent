@@ -25,7 +25,7 @@ FIGURES_DIR = Path(__file__).resolve().parent / "figures"
 TRAIN_PERIOD = ["2000-01-01", "2009-12-31"]
 TEST_PERIOD = ["2010-01-01", "2014-12-31"]
 OBJECTIVE = "NSE"
-MAX_ITERS = 5
+MAX_ITERS = 15
 NSE_TARGET = 0.80
 
 BASINS: list[dict[str, str]] = [
@@ -252,7 +252,9 @@ def validate_parameter_set(
 def write_param_range_file(path: Path, model: str, ranges: dict[str, list[float]]) -> str:
     path.parent.mkdir(parents=True, exist_ok=True)
     data = {model: {"param_name": list(ranges.keys()), "param_range": ranges}}
-    path.write_text(yaml.dump(data, default_flow_style=False, allow_unicode=True), encoding="utf-8")
+    # sort_keys=False: hydromodel maps normalized params to ranges by param_range
+    # value-order; alphabetical sort mis-aligns XAJ (K,B,IM,...) and crashes the sim.
+    path.write_text(yaml.dump(data, default_flow_style=False, allow_unicode=True, sort_keys=False), encoding="utf-8")
     return str(path)
 
 

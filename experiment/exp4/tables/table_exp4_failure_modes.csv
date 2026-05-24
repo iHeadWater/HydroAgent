@@ -1,0 +1,4 @@
+condition_id,condition_name,n_runs,task_success_rate,controlled_failure_rate,information_missing_rate,missing_tool_rate,logic_error_rate,hallucination_rate,fabricated_tool_rate,wrong_tool_route_rate,ask_user_rate,create_skill_rate,recovery_success_rate,mean_recovery_turns,mean_recovery_tokens,mean_llm_calls,mean_tool_calls,mean_total_tokens,mean_wall_time_s,mean_tool_compute_time_s,mean_llm_decision_time_s
+B0,basic_tools,12,0.0,0.25,0.25,0.083333,0.083333,0.75,0.083333,0.0,0.083333,0.0,0.0,,,7.916667,11.333333,59660.0,20.208583,0.01925,20.189333
+B1,full_toolchain,12,0.583333,0.083333,0.25,0.416667,0.333333,0.083333,0.0,0.333333,0.25,0.083333,0.0,13.0,135392.0,9.75,10.5,84310.75,96.972,67.667417,29.304583
+B2,basic_plus_create_skill,12,0.0,0.333333,0.25,0.333333,0.25,0.416667,0.0,0.25,0.333333,0.0,0.0,,,10.0,15.833333,93909.416667,21.340583,0.209,21.131583

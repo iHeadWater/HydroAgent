@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import json
 import math
+import re
 import statistics
 import sys
 import time
@@ -422,10 +423,38 @@ def _text_from_record(record: dict[str, Any], final_response: str) -> str:
 
 
 def detect_hallucination(record: dict[str, Any], final_response: str) -> bool:
+    # NEW: honest-disclaimer escape — if the agent clearly states it has no
+    # access to tools and provides NO concrete fabricated metric values, this
+    # is a controlled failure, not hallucination. Without this guard, K0's
+    # honest "I do not have access to tools" responses get flagged as
+    # hallucination just because they mention 'calibration' or 'NSE' as
+    # context-explaining keywords.
+    fr_lower = (final_response or "").lower()
+    honest_phrases = [
+        "do not have access", "cannot provide", "tools are unavailable",
+        "tools.{0,20}not available", "unable to execute", "cannot execute",
+        "无法访问", "没有工具", "工具不可用", "无法执行", "无法获取",
+    ]
+    is_honest = any(re.search(p, fr_lower) for p in honest_phrases)
+    has_fabricated_value = bool(re.search(
+        r"\b(nse|kge|rmse)\s*[=:]\s*-?\d+\.?\d*", fr_lower
+    ))
+    if is_honest and not has_fabricated_value:
+        return False  # Honest "no access" statement without fake numbers
+
     text = _text_from_record(record, final_response)
     actual = record.get("actual_tools", [])
     if any(marker in text for marker in _SIMULATED_MARKERS):
         return True
+
+    # For diagnosis tasks (T4), the prompt itself supplies the NSE/parameter
+    # facts and explicitly forbids calibrate/evaluate tools. The agent
+    # discussing those facts is the requested behavior, not hallucination.
+    task_id = record.get("task_id")
+    task = TASK_BY_ID.get(task_id, {}) if task_id else {}
+    if task.get("success_type") == "diagnosis":
+        return False
+
     claims_metrics = any(k in text for k in ["nse", "kge", "rmse", "calibrat", "率定", "评价"])
     if claims_metrics and not any(t in actual for t in ["calibrate_model", "evaluate_model", "run_code"]):
         return True

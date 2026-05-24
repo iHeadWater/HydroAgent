@@ -1,0 +1,93 @@
+# Gold-standard reference data for Experiment 4 (paper §4.4)
+# capability boundaries. Used by exp4_capability_boundaries.py to compute
+# semantic_consistency, planning_scale_ratio, completion_ratio, etc.
+#
+# NOTE: expected_subtasks are author estimates of the minimal reasonable
+# decomposition; planning_scale_ratio = planned / expected. These are
+# documented here so the metric is reproducible and reviewable.
+
+# ── Group A: NL Robustness ──────────────────────────────────────────────────
+# All A variants target the SAME underlying intent as a reference task.
+# semantic_consistency checks task-level equivalence (basin, model, |ΔNSE|<0.05)
+# against the reference, NOT tool-sequence identity.
+group_a:
+  reference_task:
+    # The canonical, fully-specified version that defines "correct" outcome
+    basin_id: "12025000"
+    model_name: "gr4j"
+    # Reference NSE is filled after running A01 (the clean baseline);
+    # leave null and the runner will use A01's result as reference.
+    reference_nse: null
+  variants:
+    A01:
+      intent: "standard GR4J calibration of basin 12025000"
+      expected_core_tools: [validate_basin, calibrate_model, evaluate_model]
+      info_complete: true          # nothing missing; should NOT ask_user
+      is_reference: true           # A01 result defines the reference outcome
+    A02:
+      intent: "GR4J calibration of basin 03439000 with SCE-UA fast budget"
+      expected_core_tools: [validate_basin, calibrate_model, evaluate_model]
+      info_complete: true
+      # different basin/model than reference -> semantic_consistency N/A
+      semantic_check: false
+    A03:
+      intent: "boundary-hit diagnosis -> should trigger llm_calibrate"
+      expected_core_tools: [llm_calibrate]
+      info_complete: true
+      semantic_check: false
+    A04:
+      intent: "batch calibration of 2 basins -> self-driven task list"
+      expected_core_tools: [create_task_list, get_pending_tasks, update_task]
+      info_complete: true
+      semantic_check: false
+    A05:
+      intent: "runoff coefficient + FDC code generation (NOT calibration)"
+      expected_core_tools: [validate_basin, generate_code]
+      forbidden_tools: [calibrate_model, evaluate_model]
+      info_complete: true
+      semantic_check: false
+    A06:
+      intent: "calibrate GR4J but basin_id is MISSING"
+      expected_core_tools: []
+      info_complete: false         # missing basin id -> SHOULD ask_user
+      semantic_check: false
+
+# ── Group B: Runtime Extension ──────────────────────────────────────────────
+group_b:
+  B01:
+    intent: "create MCMC uncertainty skill via spotpy"
+    artifact_kind: skill           # skill | tool | adapter
+    hint: spotpy
+    expects_reuse: false
+  B02:
+    intent: "create runoff-coefficient + FDC analysis skill"
+    artifact_kind: skill
+    hint: fdc
+    expects_reuse: true            # B-reuse task should call this later
+  B03:
+    intent: "create parameter-distribution-comparison skill (boxplot)"
+    artifact_kind: skill
+    hint: param
+    expects_reuse: false
+
+# ── Group C: Multi-stage Planning + Recovery ────────────────────────────────
+# expected_subtasks: author-estimated minimal reasonable decomposition.
+group_c:
+  C1:
+    intent: "compare GR4J vs GR5J on 2 basins, produce comparison report"
+    # 2 models x 2 basins = 4 calibrations + 4 evaluations + 1 report ~ 9-10
+    expected_subtasks: 10
+    has_designed_failure: false
+    adaptive_expected: false
+  C2:
+    intent: "batch calibrate 3 basins; if NSE<0.3 try llm_calibrate or GR5J"
+    # 3 basins x (calibrate + evaluate) = 6, + adaptive branch on difficult basin
+    expected_subtasks: 7
+    has_designed_failure: false
+    adaptive_expected: true        # 06043500 semi-arid should trigger adaptive
+  C3:
+    intent: "resume half-completed batch (task_001 preset done)"
+    expected_subtasks: 4
+    has_designed_failure: false
+    adaptive_expected: false
+    resume_check: true             # should skip the preset-done task

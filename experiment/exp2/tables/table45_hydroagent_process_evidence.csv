@@ -1,0 +1,7 @@
+task_id,basin_id,model,basin_attributes_used,basin_aware_init,initial_range_changed,first_boundary_hit,first_boundary_params,diagnostic_response_match,revised_search_improved,stop_reason,D_rounds,D_test_NSE,D_test_KGE
+12025000_gr4j,12025000,gr4j,True,True,True,True,x2,True,True,target_reached,2,0.7761114074204438,0.8246932444651284
+12025000_xaj,12025000,xaj,True,True,True,True,"UM,DM,C,KI,KG,CG",True,True,max_rounds,15,0.7830322001800041,0.7673848961730527
+11532500_gr4j,11532500,gr4j,True,True,True,True,x2,True,True,max_rounds,15,0.7559471715247439,0.7807549401887195
+11532500_xaj,11532500,xaj,True,True,True,True,"UM,CS,CG",True,True,max_rounds,15,0.5773470808357626,0.5604217097470418
+03439000_gr4j,03439000,gr4j,True,True,True,False,,True,True,max_rounds,15,-0.27176148253259846,-0.2632887337373697
+03439000_xaj,03439000,xaj,True,True,True,True,"UM,LM,CS",True,True,max_rounds,15,0.116397683262078,-0.021944722749137613

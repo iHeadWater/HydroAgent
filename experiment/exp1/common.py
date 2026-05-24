@@ -37,14 +37,21 @@ MAX_TRIALS = 5
 RANDOM_REPEATS = 5
 NONINFERIORITY_MARGIN = -0.02
 
+# Selected 2026-05-24 from the GR4J screen (default-range, quick budget) over 60
+# CAMELS-US basins: the 7 candidates with test NSE in [0.40, 0.65] were filtered
+# to 5 with one basin per USGS HUC region (01/03/05/06/07) so the panel covers
+# climate diversity without picking from the same hydrologic neighborhood.
+# climate_zone is left "unknown" because CAMELS does not ship a labelled
+# climate class; downstream `climate_prior` range policy will fall back to the
+# default range (probe_difficulty.py:87).
 BASINS: list[dict[str, str]] = [
-    {"basin_id": "12025000", "name": "Fish River, ME", "climate_zone": "humid_cold"},
-    {"basin_id": "03439000", "name": "French Broad River, NC", "climate_zone": "humid_warm"},
-    {"basin_id": "06043500", "name": "Gallatin River, MT", "climate_zone": "semiarid_mountain"},
-    {"basin_id": "08101000", "name": "Cowhouse Creek, TX", "climate_zone": "semiarid_flashy"},
-    {"basin_id": "11532500", "name": "Smith River, CA", "climate_zone": "mediterranean"},
+    {"basin_id": "01543000", "name": "HUC01 New England",   "climate_zone": "unknown"},
+    {"basin_id": "03574500", "name": "HUC03 South Atlantic", "climate_zone": "unknown"},
+    {"basin_id": "05495000", "name": "HUC05 Ohio/Tennessee", "climate_zone": "unknown"},
+    {"basin_id": "06885500", "name": "HUC06 Missouri",       "climate_zone": "unknown"},
+    {"basin_id": "07197000", "name": "HUC07 Mississippi",    "climate_zone": "unknown"},
 ]
-MODELS = ["xaj", "gr4j"]
+MODELS = ["gr4j"]  # XAJ only had 1 medium candidate in screen; stick to GR4J for exp1 v2
 OBJECTIVES = ["NSE", "KGE", "LOGNSE"]
 RANGE_POLICIES = ["default", "climate_prior", "wide", "boundary_expand"]
 BUDGET_LEVELS = ["quick", "default", "deep"]
@@ -328,7 +335,11 @@ def write_range_file(
         }
     }
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(yaml.dump(data, default_flow_style=False, allow_unicode=True), encoding="utf-8")
+    # sort_keys=False is CRITICAL: hydromodel maps normalized params to ranges
+    # by the param_range dict's value order. Alphabetical sorting (yaml default)
+    # mis-aligns XAJ params (K,B,IM,... != alphabetical) and crashes the sim.
+    # GR4J (x1..x4) happens to be alphabetical so it was never hit.
+    path.write_text(yaml.dump(data, default_flow_style=False, allow_unicode=True, sort_keys=False), encoding="utf-8")
     return str(path)
 
 

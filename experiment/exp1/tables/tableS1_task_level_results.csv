@@ -1,0 +1,2 @@
+task_id,basin_id,model,human_test_NSE,agent_test_NSE,delta_agent_human_NSE,agent_test_KGE,random_median_NSE,random_IQR_low,random_IQR_high,agent_random_percentile,agent_auc_best_NSE,human_auc_best_NSE,human_active_min,agent_tokens
+12025000_xaj,12025000,xaj,,0.7758408797076196,,0.8022394502010424,,,,,0.775841,,0.0,683

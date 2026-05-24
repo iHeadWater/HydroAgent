@@ -158,6 +158,83 @@ class HydroAgent:
         """Request immediate stop after current tool completes."""
         self._stop_requested = True
 
+    # Known core tools that LLMs frequently fabricate references to in final
+    # responses. Used by _validate_final_response for engineering-level checks.
+    _FAB_CHECK_TOOLS = {
+        "calibrate_model", "evaluate_model", "validate_basin", "llm_calibrate",
+        "run_simulation", "visualize", "create_skill", "run_code", "generate_code",
+        "compare_models", "batch_calibrate", "get_basin_attributes",
+    }
+
+    def _validate_final_response(self, final_response: str) -> str:
+        """Engineering-level boundary-behavior validator.
+
+        Prompt-level "Never fabricate metrics" rules are routinely ignored by
+        LLMs (observed 67-92% fabricated_tool_rate in exp4 baseline). This
+        post-hoc check scans the final response for:
+          1. Tool names mentioned that were NOT actually called successfully
+          2. NSE/KGE/RMSE values claimed without a successful evaluate_model call
+
+        If any issue is found, a self-correction warning is appended so the
+        downstream evaluator (and the user) can see exactly what is fabricated.
+        The original text is preserved for honest audit.
+        """
+        import re
+
+        # Collect tools that were actually called with success in this session.
+        called_ok: set[str] = set()
+        for entry in self.memory._log:
+            if not isinstance(entry, dict):
+                continue
+            tool = entry.get("tool")
+            if not tool:
+                continue
+            rs = str(entry.get("result_summary", "")).lower()
+            if "success" in rs and "false" in rs:
+                continue  # explicit failure -- don't count
+            called_ok.add(tool)
+
+        # Scan final_response for mentions of known core tools.
+        mentioned: set[str] = set()
+        for tool_name in self._FAB_CHECK_TOOLS:
+            # Match tool_name as a standalone token (with word-boundary or quotes/backticks)
+            if re.search(rf"(?:[`\"']|\b){re.escape(tool_name)}(?:[`\"']|\b)", final_response):
+                mentioned.add(tool_name)
+
+        fabricated = mentioned - called_ok
+
+        # Check: claims a metric value but evaluate_model never succeeded.
+        metric_claimed = bool(re.search(
+            r"NSE\s*[=:]\s*-?\d|\bKGE\s*[=:]\s*-?\d|RMSE\s*[=:]\s*-?\d|"
+            r"train.{0,12}NSE|test.{0,12}NSE",
+            final_response, re.IGNORECASE
+        ))
+        eval_ok = "evaluate_model" in called_ok
+
+        issues = []
+        if fabricated:
+            issues.append(
+                f"Claimed tools not actually invoked in this session: "
+                f"{', '.join(sorted(fabricated))}"
+            )
+        if metric_claimed and not eval_ok:
+            issues.append(
+                "Reported NSE/KGE/RMSE-like metrics, but evaluate_model never "
+                "succeeded in this session — those numbers are not from real tool output."
+            )
+
+        if not issues:
+            return final_response
+
+        warning = (
+            "\n\n---\n"
+            "⚠️ **Self-correction (engineering-level validation)**\n\n"
+            + "\n".join(f"- {issue}" for issue in issues)
+            + "\n\nAny numerical claims or workflow descriptions involving the "
+            "above are NOT grounded in real tool outputs and should not be trusted."
+        )
+        return final_response + warning
+
     def run(self, query: str, prior_messages: list[dict] | None = None) -> str:
         """Run the agentic loop for a user query.
 

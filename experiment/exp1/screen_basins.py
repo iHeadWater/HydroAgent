@@ -62,38 +62,46 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--n", type=int, default=60, help="number of basins to sample")
     parser.add_argument("--seed", type=int, default=20260522, help="sampling seed (reproducible)")
+    parser.add_argument("--models", nargs="+", default=["gr4j"], help="models to screen")
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     ensure_dirs()
     cfg = load_base_config()
     run_dir = OUTPUT_ROOT / "screen"
-    log_path = run_dir / "screen_trials.jsonl"
+    # Per-model jsonl so existing screen_trials.jsonl (GR4J) is preserved.
+    log_paths = {m: run_dir / (f"screen_{m}_trials.jsonl" if m != "gr4j" or args.models != ["gr4j"]
+                               else "screen_trials.jsonl") for m in args.models}
 
     all_ids = load_basin_ids(cfg)
     rng = random.Random(args.seed)
     sample = rng.sample(all_ids, min(args.n, len(all_ids)))
-    LOGGER.info("Sampled %d / %d basins (seed=%d)", len(sample), len(all_ids), args.seed)
+    LOGGER.info("Sampled %d / %d basins (seed=%d) models=%s",
+                len(sample), len(all_ids), args.seed, args.models)
 
-    done = {r["basin_id"] for r in read_jsonl(log_path)}
-
-    for i, bid in enumerate(sample, 1):
-        if bid in done:
-            LOGGER.info("[%d/%d] skip (done): %s", i, len(sample), bid)
-            continue
-        task = {"basin_id": bid, "name": bid, "climate_zone": "unknown",
-                "model": "gr4j", "task_id": task_id(bid, "gr4j")}
-        decision = MenuDecision(objective="NSE", budget_level="quick", range_policy="default")
-        try:
-            record = run_trial(method="SCREEN", task=task, trial_idx=1,
-                               decision=decision, cfg=cfg, run_dir=run_dir)
-        except Exception as exc:  # noqa: BLE001 - never abort the batch
-            record = {"basin_id": bid, "model": "gr4j", "method": "SCREEN",
-                      "test_metrics": {}, "success": False, "error": str(exc)}
-        append_jsonl(log_path, record)
-        nse = flatten_metric(record, "test", "NSE") if record.get("test_metrics") else None
-        LOGGER.info("[%d/%d] %s: test NSE=%s err=%s", i, len(sample), bid, nse,
-                    (record.get("error") or "")[:60])
+    total = len(sample) * len(args.models)
+    step = 0
+    for model in args.models:
+        log_path = log_paths[model]
+        done = {r["basin_id"] for r in read_jsonl(log_path)}
+        for bid in sample:
+            step += 1
+            if bid in done:
+                LOGGER.info("[%d/%d] skip (done): %s/%s", step, total, bid, model)
+                continue
+            task = {"basin_id": bid, "name": bid, "climate_zone": "unknown",
+                    "model": model, "task_id": task_id(bid, model)}
+            decision = MenuDecision(objective="NSE", budget_level="quick", range_policy="default")
+            try:
+                record = run_trial(method="SCREEN", task=task, trial_idx=1,
+                                   decision=decision, cfg=cfg, run_dir=run_dir)
+            except Exception as exc:  # noqa: BLE001 - never abort the batch
+                record = {"basin_id": bid, "model": model, "method": "SCREEN",
+                          "test_metrics": {}, "success": False, "error": str(exc)}
+            append_jsonl(log_path, record)
+            nse = flatten_metric(record, "test", "NSE") if record.get("test_metrics") else None
+            LOGGER.info("[%d/%d] %s/%s: test NSE=%s err=%s", step, total, bid, model, nse,
+                        (record.get("error") or "")[:60])
 
     # ---- summary ----
     rows = read_jsonl(log_path)

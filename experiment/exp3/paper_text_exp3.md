@@ -18,13 +18,15 @@ For each condition and task, we repeat the run three times with independent work
 | K1 Tools only | same as K2 | No | No | No | No | 0 | Isolate the contribution of executable tools |
 | K2 Full knowledge | same as K1 | Yes | Yes | Yes | Yes | [fill] | Measure marginal value of full knowledge input |
 
-## Table 4.7. Core results of Experiment 3
+## Table 4.7. Core results of Experiment 3 (n = 12 per condition, 3 repeats × 4 tasks)
 
-| Condition | Success rate | Tool route success | Hallucination rate | LLM calls | Tool calls | Total tokens | Wall time (s) | Tokens per success | Gain vs previous |
+| Condition | Success | Tool route | Hallucination | LLM calls | Tool calls | Total tokens | Wall (s) | Tokens/success | Gain vs previous |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| K0 Plain LLM | [fill] | [fill] | [fill] | [fill] | [fill] | [fill] | [fill] | [fill] | - |
-| K1 Tools only | [fill] | [fill] | [fill] | [fill] | [fill] | [fill] | [fill] | [fill] | [K1-K0] |
-| K2 Full knowledge | [fill] | [fill] | [fill] | [fill] | [fill] | [fill] | [fill] | [fill] | [K2-K1] |
+| K0 Plain LLM (no tools) | 25.0% | 25.0% | 16.7% | 1.0 | 0.0 | 1 827 | 27.4 | 7 306 | — |
+| K1 Tools only (no knowledge) | **83.3%** | 91.7% | 0.0% | 9.2 | 9.3 | 56 420 | 152.6 | 67 705 | +58.3% vs K0 |
+| K2 Full knowledge + tools | 75.0% | 75.0% | 0.0% | 9.6 | 9.8 | 134 524 | 236.7 | 179 365 | **−8.3%** vs K1 |
+
+K1 already reaches the highest success rate in this set. Adding the full knowledge base (K2) costs +78 k tokens per task on average but reduces success by 8.3 percentage points; the marginal gain per 10 k extra tokens is −0.011, i.e. negative. The reason is visible in the next subsection.
 
 ## Figure 4.5. Success rate versus token cost
 
@@ -36,10 +38,10 @@ Use `experiment/exp3/figures/fig_exp3_task_heatmap.png`. The expected pattern is
 
 ## 4.3 Knowledge input ablation results
 
-The results in Table 4.7 show a clear separation between executable capability and additional knowledge input. Under K0, the model can describe a plausible calibration procedure, but it cannot ground the answer in real basin validation, calibration output, or evaluation metrics. This leads to a low task success rate of [fill] and a hallucination rate of [fill], especially in tasks that require computed NSE/KGE or real data analysis.
+The aggregated numbers in Table 4.7 already suggest that the dominant variable is executable tooling, not knowledge text. The task-level breakdown in Figure 4.6 makes this sharper and reveals a counter-intuitive failure mode for the heaviest condition.
 
-Adding the necessary tools in K1 changes the behavior more substantially than adding any other input. The success rate increases from [K0 fill] to [K1 fill], and the tool-route success rate reaches [fill]. This indicates that the decisive step is giving the model executable access to hydrological operations. Once the model can call validation, calibration, evaluation, and code execution tools, most standard workflows can be completed without loading the full knowledge base into the initial context.
+**Executable tools account for almost all of the recoverable success.** Going from K0 (no tools) to K1 (tools, no knowledge) raises success on T1 (standard calibration), T2 (model comparison), and T3 (code analysis) from 0/3 each to 3/3 each — the entire deficit at K0 on these tasks is closed by tool access alone. The tool-route success rate moves from 25.0% to 91.7%, and hallucination drops from 16.7% to 0.0%. This confirms that fabricated NSE/KGE under K0 is caused by the absence of an executable grounding step, not by the model lacking hydrological vocabulary.
 
-The full-knowledge condition K2 provides a more selective improvement. Compared with K1, its overall success rate changes by [fill], while the mean token cost increases by [fill]. The largest qualitative difference appears in the diagnostic task, where the additional knowledge helps the agent interpret parameter boundary signals and distinguish between range expansion, optimizer budget, and possible model-structure mismatch. In contrast, for standard calibration and model comparison, the improvement over K1 is limited because the necessary procedure is already encoded by the available tools and their schemas.
+**Adding the full knowledge base produces no further gain on routine tasks, and produces a measurable loss on the diagnostic task.** On T1–T3, K2 matches K1 at 3/3. On T4 (failure diagnosis, where the prompt itself supplies the calibration outcome and forbids re-running calibration/evaluation), the pattern reverses sharply: K0 reaches 3/3, K1 reaches 1/3, and K2 reaches **0/3**, with all three K2 runs invoking the forbidden `generate_code`/`run_code` tools. K2's `forbidden_tool_rate` of 25.0% is three times K1's 8.3% even though K2 has the same tool set. The additional 78 k tokens of injected hydrological knowledge appear to bias the agent towards "do something computational" when the requested behavior is purely interpretive — the more knowledge the agent reads about parameters, the more strongly it tries to verify them with code, even after being told the result and being told not to.
 
-These results support a tool-first interpretation of HydroAgent. Knowledge is useful, but its value is not proportional to the amount of context injected. For routine executable workflows, a compact tool-only context can reach most of the full system's performance at a lower token cost. The full knowledge base is most valuable when the agent must diagnose failures or recover from ambiguous model behavior. This suggests that HydroAgent should prefer a knowledge-on-demand strategy rather than always placing all available knowledge in the prompt.
+This reversal has a direct design consequence. For HydroAgent, knowledge is not strictly additive: front-loading domain text into the system prompt shifts the agent's default action towards execution. On execution-shaped tasks this is harmless; on diagnosis-shaped tasks it is actively harmful. The combined evidence — full K1 success on T1–T3, K0 dominance on T4, and K2's invariant regression on T4 — supports a knowledge-on-demand policy: keep the system prompt close to K1 (tools and procedural rules only) and load domain knowledge only when the current task's success criterion requires it. This is consistent with the broader principle that an LLM-based hydrological agent should use tools to ground action, and should treat knowledge text as another input that has both a token cost and a behavioral side-effect.

@@ -1,0 +1,5 @@
+method,name,controller,max_trials,human_intervention,token_recorded,allowed_menu
+M0,default_script,Fixed script,1,None,No,objective + budget + range_policy
+M1,human_script,Human menu decisions,5,Menu selection and notes only,No,objective + budget + range_policy
+M2,hydroagent_menu,HydroAgent/LLM menu decisions,5,Start task only,Yes,objective + budget + range_policy
+M3,random_menu,Uniform random menu decisions,5,None,No,objective + budget + range_policy

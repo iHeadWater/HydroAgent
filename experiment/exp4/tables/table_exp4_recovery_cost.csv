@@ -1,0 +1,13 @@
+scenario_id,scenario_name,boundary_type,condition_id,condition_name,n_runs,task_success_rate,controlled_failure_rate,information_missing_rate,missing_tool_rate,logic_error_rate,hallucination_rate,fabricated_tool_rate,wrong_tool_route_rate,ask_user_rate,create_skill_rate,recovery_success_rate,mean_recovery_turns,mean_recovery_tokens,mean_llm_calls,mean_tool_calls,mean_total_tokens,mean_wall_time_s,mean_tool_compute_time_s,mean_llm_decision_time_s
+S1,missing_basin_id,information_missing,B0,basic_tools,3,0.0,0.333333,1.0,0.0,0.333333,0.666667,0.333333,0.0,0.333333,0.0,0.0,,,5.333333,8.0,35325.666667,13.836333,0.011667,13.824667
+S1,missing_basin_id,information_missing,B1,full_toolchain,3,0.0,0.333333,1.0,0.0,0.666667,0.0,0.0,0.666667,0.666667,0.0,0.0,,,8.0,9.666667,58873.333333,87.296667,64.418333,22.878333
+S1,missing_basin_id,information_missing,B2,basic_plus_create_skill,3,0.0,0.0,1.0,0.0,0.333333,0.666667,0.0,0.333333,1.0,0.0,0.0,,,10.0,15.0,87804.333333,21.647667,0.013,21.634667
+S2,missing_calibration_tools,missing_tool,B0,basic_tools,3,0.0,0.333333,0.0,0.333333,0.0,0.666667,0.0,0.0,0.0,0.0,0.0,,,8.0,11.333333,69654.0,17.585333,0.024333,17.561
+S2,missing_calibration_tools,missing_tool,B1,full_toolchain,3,1.0,0.0,0.0,1.0,0.333333,0.0,0.0,0.333333,0.0,0.0,0.0,,,8.0,9.666667,69875.666667,111.605,84.829,26.776
+S2,missing_calibration_tools,missing_tool,B2,basic_plus_create_skill,3,0.0,0.0,0.0,0.666667,0.666667,0.333333,0.0,0.666667,0.0,0.0,0.0,,,10.0,15.333333,103116.0,19.511333,0.017667,19.493667
+S3,wrong_route_risk,logic_error,B0,basic_tools,3,0.0,0.333333,0.0,0.0,0.0,0.666667,0.0,0.0,0.0,0.0,0.0,,,10.0,13.0,67204.0,23.168667,0.027667,23.141
+S3,wrong_route_risk,logic_error,B1,full_toolchain,3,1.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.333333,0.0,0.0,,,11.333333,9.0,90325.0,81.581667,49.409,32.172667
+S3,wrong_route_risk,logic_error,B2,basic_plus_create_skill,3,0.0,0.666667,0.0,0.0,0.0,0.333333,0.0,0.0,0.0,0.0,0.0,,,10.0,18.333333,95133.333333,19.555667,0.784667,18.771
+S4,out_of_scope_tool,missing_tool,B0,basic_tools,3,0.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,0.0,,,8.333333,13.0,66456.333333,26.244,0.013333,26.230667
+S4,out_of_scope_tool,missing_tool,B1,full_toolchain,3,0.333333,0.0,0.0,0.666667,0.333333,0.333333,0.0,0.333333,0.0,0.333333,0.0,13.0,135392.0,11.666667,13.666667,118169.0,107.404667,72.013333,35.391333
+S4,out_of_scope_tool,missing_tool,B2,basic_plus_create_skill,3,0.0,0.666667,0.0,0.666667,0.0,0.333333,0.0,0.0,0.333333,0.0,0.0,,,10.0,14.666667,89584.0,24.647667,0.020667,24.627

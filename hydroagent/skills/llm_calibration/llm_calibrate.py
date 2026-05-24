@@ -307,7 +307,7 @@ def llm_calibrate(
                                 if basin_attrs.get(k) is not None
                             },
                         }},
-                        default_flow_style=False, allow_unicode=True,
+                        default_flow_style=False, allow_unicode=True, sort_keys=False,
                     ),
                     encoding="utf-8",
                 )
@@ -369,7 +369,12 @@ def llm_calibrate(
                 }
             }
             with open(param_range_file, "w") as f:
-                yaml.dump(range_yaml, f, default_flow_style=False, allow_unicode=True)
+                # sort_keys=False is CRITICAL: hydromodel maps normalized params to
+                # ranges by the param_range dict's value order. Alphabetical sort
+                # (yaml default) mis-aligns XAJ params (K,B,IM,... != alphabetical)
+                # and crashes the simulation. GR4J (x1..x4) is alphabetical so it
+                # was never hit. See exp1/common.py for the same fix.
+                yaml.dump(range_yaml, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
             logger.info(f"Custom param ranges written to {param_range_file}")
 
         # Adaptive budget: round 1 uses full budget; later rounds scale down.
