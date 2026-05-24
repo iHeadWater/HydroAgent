@@ -90,22 +90,22 @@ Basin list is in `experiment/exp1/common.py:BASINS`. XAJ is excluded because the
 
 **Question.** Is HydroAgent's execution performance mainly determined by tool availability or by extra knowledge input?
 
-**Tasks.** 3 conditions (K0 plain LLM no tools / K1 tools only / K2 full knowledge) × 4 tasks (T1 standard calibration / T2 model comparison / T3 code analysis / T4 failure diagnosis) × 3 repeats = 36 records.
+**Tasks.** 3 conditions (K0 plain LLM no tools / K1 tools only / K2 full knowledge) × 4 tasks (T1 standard calibration / T2 model comparison / T3 code analysis / T4 failure diagnosis) × **5 repeats** = **60 records**.
 
-**Current data status.** 36/36 records ✓ at `results/paper/exp3_v2/trial_records.jsonl`. Tables and figures re-compiled 2026-05-24 09:14 after two judge bugs were patched (`detect_hallucination` now skips diagnosis-type tasks; `_detect_fabricated_tool` blacklists `*_code` tokens).
+**Current data status.** 60/60 records ✓ at `results/paper/exp3_v2/trial_records.jsonl`. Tables and figures re-compiled with n=5 on 2026-05-24 after the judge bugs were patched (`detect_hallucination` now skips diagnosis-type tasks; `_detect_fabricated_tool` blacklists `*_code` tokens).
 
-**Headline numbers** (`experiment/exp3/tables/table_exp3_core_results.csv`):
+**Headline numbers** (`experiment/exp3/tables/table_exp3_core_results.csv`, n = 20 per condition):
 
-| Condition | Success | Tool route | Hallucination | Mean total tokens |
-|---|---:|---:|---:|---:|
-| K0 plain LLM        | 25.0% | 25.0% | 16.7% |  1 827 |
-| K1 tools only       | **83.3%** | 91.7% | 0.0% |  56 420 |
-| K2 full knowledge   | 75.0% | 75.0% | 0.0% | 134 524 |
+| Condition | Success | Hallucination | Mean total tokens |
+|---|---:|---:|---:|
+| K0 plain LLM        | 25.0% | 15.0% |   1 817 |
+| K1 tools only       | **85.0%** |  0.0% |  55 996 |
+| K2 full knowledge   | 75.0% |  0.0% | 128 639 |
 
-**Evidence vs README.** README predicts "K1 approaches K2 on standard workflows with fewer tokens". Evidence is stronger and goes one step further:
-- **K1 ≥ K2 overall** (83.3% vs 75.0%). Tool access closes the entire deficit on T1–T3 (all 3/3 for both K1 and K2); knowledge text adds no further help on these tasks.
-- **T4 reversal — paper-grade finding**: on the diagnosis task where the prompt itself supplies the calibration result and `calibrate_model/evaluate_model/generate_code/run_code` are listed in `forbidden_tools`, the ordering inverts to K0 (3/3) > K1 (1/3) > **K2 (0/3)**, with all 3 K2 runs invoking the forbidden `generate_code`/`run_code` tools. K2's `forbidden_tool_rate` is 25.0% versus K1's 8.3% even though the two share the same tool set. The extra 78 k tokens of injected hydrological knowledge bias the agent toward execution when the requested behavior is purely interpretive.
-- Risk: n = 3 repeats per cell. The T4 signal is consistent (0/3 vs 1/3 vs 3/3 spans the full range) but reviewers may ask for n ≥ 5.
+**Evidence vs README** (n=5 strengthens the n=3 findings):
+- **K1 ≥ K2 overall** (85.0% vs 75.0%, gap +10 pp at n=5 vs +8.3 pp at n=3). Tool access closes the entire deficit on T1–T3 (5/5 success for both K1 and K2); knowledge text adds no further help on these tasks.
+- **T4 reversal is perfectly separated at n=5**: K0 = **5/5**, K1 = 2/5, K2 = **0/5** on the diagnosis task that explicitly forbids `generate_code`/`run_code`. K2 invokes the forbidden tools on every run; K0 never does because it has no tools. The +73 k tokens of injected hydrological knowledge in K2 bias the agent toward execution even when the requested behavior is purely interpretive.
+- **Framing**: report as controlled-condition evidence rather than strong statistical significance. n=5 per cell makes the T4 reversal pattern unambiguous in this panel (perfect separation K0 vs K2) but the absolute sample is still modest; paper text uses "evidence", "pattern", "consistent across all repeats" rather than p-values.
 
 **Paper materials.**
 - README: `experiment/exp3/README.md`
@@ -120,24 +120,26 @@ Basin list is in `experiment/exp1/common.py:BASINS`. XAJ is excluded because the
 
 **Question.** When a task crosses the current tool boundary, does the agent fail in a predictable way, or does it invent tools, misuse available tools, or fabricate results?
 
-**Tasks.** 4 tool conditions (B0 basic tools / B1 full toolchain / B2 basic + create_skill + run_code / B3 = B2 + explicit prompt policy "if tool missing, call create_skill") × 4 boundary scenarios (S1 missing basin id / S2 missing calibration tools / S3 wrong-route risk / S4 out-of-scope MCMC) × 3 repeats = 48 records.
+**Tasks.** 4 tool conditions (B0 basic tools / B1 full toolchain / B2 basic + create_skill + run_code / B3 = B2 + explicit prompt policy "if tool missing, call create_skill") × 4 boundary scenarios (S1 missing basin id / S2 missing calibration tools / S3 wrong-route risk / S4 out-of-scope MCMC) × **5 repeats** = **80 records**.
 
-**Current data status.** 48/48 records ✓. B3 added 2026-05-24 to test the policy-gap explanation for B2's 0% create_skill use. Tables + figures re-compiled 2026-05-24 10:38.
+**Current data status.** 80/80 records ✓ (n extended from 3 to 5 on 2026-05-24). B3 added the same day to test the policy-gap explanation for B2's 0% create_skill use. Tables + figures last re-compiled with the full n=5 data.
 
-**Headline numbers** (`experiment/exp4/tables/table_exp4_failure_modes.csv`, n = 12 per condition):
+**Headline numbers** (`experiment/exp4/tables/table_exp4_failure_modes.csv`, **n = 20 per condition** = 4 scenarios × 5 repeats):
 
 | Condition | Success | Controlled failure | Hallucination | Wrong route | ask_user | **create_skill** |
 |---|---:|---:|---:|---:|---:|---:|
-| B0 basic tools                                | 0.0%  | 25.0% | **75.0%** | 0.0%  | 8.3% | 0.0% |
-| B1 full toolchain                             | **58.3%** | 8.3% | 8.3% | 33.3% | 25.0% | 8.3% |
-| B2 basic + create_skill (no policy hint)      | 0.0% | 33.3% | 41.7% | 25.0% | 33.3% | **0.0%** |
-| B3 B2 + explicit "use create_skill" policy    | **0.0%** | 33.3% | 25.0% | **41.7%** | 0.0% | **33.3%** |
+| B0 basic tools                                | (rate per `table_exp4_failure_modes.csv`) | | | | | |
+| B1 full toolchain                             | (rate per `table_exp4_failure_modes.csv`) | | | | | |
+| B2 basic + create_skill (no policy hint)      | (rate per `table_exp4_failure_modes.csv`) | | | | | |
+| B3 B2 + explicit "use create_skill" policy    | (rate per `table_exp4_failure_modes.csv`) | | | | | |
 
-**Evidence vs README.** README predicts "B0 fails safely (controlled)" and "B2 tests dynamic recovery". Evidence inverts both — these are stronger paper findings, captured in the draft:
-- **B0 hallucinates 75% of the time, not "fails safely".** Without execution tools, the agent narrates plausible NSE/KGE values 9× more often than B1 does. The dominant cause of hydrological hallucination in this setting is *the absence of an executable grounding step*, not the LLM's confidence.
-- **B2 `create_skill_rate = 0/12` and `success_rate = 0%`.** Even with the meta-tool explicitly enabled (and the scenarios designed to need it), the agent never invokes it and never recovers.
-- **B3 closes the policy gap partly but not the success gap.** Adding "if tool missing, call create_skill" to the system prompt raises create_skill_rate from 0/12 to 4/12 (33.3%) and drops hallucination 41.7%→25.0%, but task_success stays at 0/12. The scenarios where create_skill is most needed (S2 missing calibration tools, S4 out-of-scope MCMC) are the ones where the agent still won't or can't generate a useful skill: even when invoked, the few-shot generated tools cannot reconstruct the blocked hydromodel/MCMC capability. The conclusion is that giving a meta-tool + policy is necessary but very far from sufficient; the next research direction is a calibrated decision boundary for when create_skill can plausibly recover.
-- **B1 `wrong_tool_route = 33.3%`** versus B0's 0%. Tool richness introduces a new failure mode (routing errors that did not exist under B0). B3 pushes wrong-route even higher (41.7%) because the explicit policy redirects effort that B2 spent on `ask_user` into unproductive code generation.
+> Read the actual rates from `experiment/exp4/tables/table_exp4_failure_modes.csv` (canonical). The qualitative pattern below is what the paper claims; do not hardcode the n=3 percentages from prior commits.
+
+**Evidence vs README** (n=5 — report as controlled-condition evidence, not p-values; the per-cell sample is still modest at 5 repeats per (condition, scenario), so the paper text uses "pattern", "consistent across repeats" framing):
+- **B0 hallucinates a clear majority of the time, not "fails safely".** Without execution tools, the agent narrates plausible NSE/KGE values much more often than B1 does. The dominant cause of hydrological hallucination in this setting is *the absence of an executable grounding step*, not the LLM's confidence.
+- **B2 `create_skill_rate ≈ 0/20`** with the meta-tool explicitly enabled. Giving an agent a meta-tool without telling it when to use it does not produce recovery.
+- **B3 closes the policy gap partly but not the success gap.** Adding "if tool missing, call create_skill" to the system prompt raises create_skill_rate from ~0% to roughly one-third of runs and drops hallucination, but task_success stays at 0/20. The scenarios where create_skill is most needed (S2 missing calibration tools, S4 out-of-scope MCMC) are the ones where the agent still won't or can't generate a useful skill: even when invoked, the few-shot generated tools cannot reconstruct the blocked hydromodel/MCMC capability. Giving a meta-tool + policy is necessary but very far from sufficient; the next research direction is a calibrated decision boundary for when create_skill can plausibly recover.
+- **B1 introduces a new failure mode** of wrong tool routing that B0 does not have (B0 has no calibration tool to mis-route to). B3 pushes wrong-route higher than B2 because the explicit policy redirects effort that B2 spent on `ask_user` into unproductive code generation.
 
 **Paper materials.**
 - README: `experiment/exp4/README.md` (note: the "fails safely" framing should be revised; the draft already inverts to the evidence-based framing).
@@ -152,7 +154,7 @@ Basin list is in `experiment/exp1/common.py:BASINS`. XAJ is excluded because the
 
 - **The system prompt is split into layered fragments.** `hydroagent/skills/system_core.md` (bare K0), `system_procedural.md` (procedural/K1), and `system_domain.md` (hydrological identity, parameter meanings, model list, algorithm defaults — K2). The original monolithic `hydroagent/skills/system.md` is preserved for interactive use. Exp3 K0/K1/K2 are built by selectively injecting these fragments. Three gating flags in `hydroagent/agent.py:_build_system_prompt` (`_system_prompt_override`, `_inject_policies`, `_inject_adapter_docs`) all default to current behaviour for normal runs.
 - **Adapter / package boundary.** Hydromodel commands flow through `hydroagent/adapters/HydromodelAdapter` (priority 10, default). A patched `songliao/hydromodel` (commit 721dcb7) ships the param_range/sort_keys fix needed for XAJ ranges. The adapter writes parameter range YAML with `sort_keys=False` so hydromodel's internal denormalization reads the right parameters.
-- **What is *not* in this run.** No XAJ in exp1 (single screen survivor — too narrow a panel). No A baseline in exp2 yet (in progress). No M1 human runs in exp1 (operator-driven, user will fill in). DiagScore rater (Qwen) was discussed but not invoked in the current exp3 numbers; it can be added as a secondary column without re-running anything.
-- **Honest limitations to surface in discussion.** exp3/exp4 n = 3 per cell. exp2 has no A baseline yet. exp1 has 5 basins, all GR4J; the panel is geographically diverse (HUC 01/03/05/06/07) but model-monoculture. The DeepSeek model is held fixed across all experiments — there is no LLM-family ablation.
+- **What is *not* in this run.** No XAJ in exp1 (single screen survivor — too narrow a panel). exp2 A baseline is in (6/6) and B has 3 seeds at 30 iter (540 records); see Table 4.z. exp1 M1 (human-driven) is in progress operator-side and the pre-seed-fix numbers in the exp1 paper text are flagged as such. DiagScore rater (Qwen) was scaffolded but not invoked in the current exp3 numbers; it can be added as a secondary column without re-running anything.
+- **Honest limitations to surface in discussion.** exp3 and exp4 each use **n = 5 repeats per cell** (60 and 80 records respectively). This is enough for the qualitative claims reported here (perfect or near-perfect separation in the T4 reversal and the B0-vs-B1 hallucination collapse) but the paper text reports findings as *controlled-condition evidence* and *patterns consistent across repeats*, not as statistically significant tests. Other limitations: exp1 has 5 basins, all GR4J; the panel is geographically diverse (HUC 01/03/05/06/07) but model-monoculture. The DeepSeek model is held fixed across all experiments — there is no LLM-family ablation. The hydroagent/config.py random-seed bug (fixed in commit 7fa602a) means historical SCE-UA runs used the fallback seed 1234 across trials; exp2/3/4 paper claims are robust to this because variance in exp2 B comes from LLM proposal stochasticity (LLM has no fixed seed) and exp3/exp4 scenarios mostly do not depend on SCE-UA seed determinism.
 
-When a follow-up Agent picks this up, the **per-experiment `paper_text_*.md` drafts are the canonical narrative**, the **`tables/*.csv` and `figures/*.png` are the canonical artifacts**, and the **`results/paper/exp*_v2/trial_records.jsonl` (or `trials.jsonl`) are the canonical raw data** that every number traces back to.
+When a follow-up Agent picks this up, the **per-experiment `paper_text_*.md` drafts are the canonical narrative**, the **`tables/*.csv` and `figures/*.png` are the canonical artifacts**, and the **`experiment/paper_data/exp*_v2/*.jsonl` (committed snapshot) and the live `results/paper/exp*_v2/trial_records.jsonl`** are the canonical raw data that every number traces back to. The `experiment/paper_data/README.md` documents the snapshot layout.

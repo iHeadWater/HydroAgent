@@ -5,7 +5,7 @@
 | Reference in this text | File | Row/column meaning |
 |---|---|---|
 | Table 4.8 (tool conditions + boundary scenarios) | `experiment/exp4/tables/table_exp4_tool_conditions.csv` | One row per condition (B0/B1/B2/B3) with `allowed_tools`, `observed_tool_schemas`, `allows_execution`, `allows_dynamic_generation`. Scenario definitions are in the run script `experiment/exp4/common.py:SCENARIOS`. |
-| Table 4.9 (failure modes per condition) | `experiment/exp4/tables/table_exp4_failure_modes.csv` | One row per condition (n=12 = 4 scenarios × 3 repeats). Columns: `task_success_rate`, `controlled_failure_rate`, `information_missing_rate`, `missing_tool_rate`, `logic_error_rate`, `hallucination_rate`, `fabricated_tool_rate`, `wrong_tool_route_rate`, `ask_user_rate`, `create_skill_rate`, `recovery_success_rate`, `mean_recovery_turns`, `mean_recovery_tokens`, `mean_llm_calls`, `mean_tool_calls`, `mean_prompt_tokens`, `mean_completion_tokens`, `mean_cached_tokens`, `mean_total_tokens`, `mean_wall_time_s`, `mean_tool_compute_time_s`, `mean_llm_decision_time_s`. |
+| Table 4.9 (failure modes per condition) | `experiment/exp4/tables/table_exp4_failure_modes.csv` | One row per condition (n = 20 = 4 scenarios × 5 repeats). Columns: `task_success_rate`, `controlled_failure_rate`, `information_missing_rate`, `missing_tool_rate`, `logic_error_rate`, `hallucination_rate`, `fabricated_tool_rate`, `wrong_tool_route_rate`, `ask_user_rate`, `create_skill_rate`, `recovery_success_rate`, `mean_recovery_turns`, `mean_recovery_tokens`, `mean_llm_calls`, `mean_tool_calls`, `mean_prompt_tokens`, `mean_completion_tokens`, `mean_cached_tokens`, `mean_total_tokens`, `mean_wall_time_s`, `mean_tool_compute_time_s`, `mean_llm_decision_time_s`. |
 | Scenario × condition breakdown | `experiment/exp4/tables/table_exp4_recovery_cost.csv` | One row per (scenario, condition). Use when discussing scenario-specific aversion such as "S2 is 0/3 for B2 and B3". |
 | Every individual run | `experiment/exp4/tables/tableS_exp4_trial_records.csv` | 48 rows. Per-trial fields including `prompt_tokens`, `completion_tokens`, `cached_tokens`, `total_tokens`, `wall_time_s`, `tool_compute_time_s`, `llm_decision_time_s`, `actual_tools`, all failure-mode booleans. **Each row is one complete agent run**; there is no per-iteration table because each boundary scenario is one agent invocation, not an iterated calibration loop. |
 | Fig 4.7 failure mode composition | `experiment/exp4/figures/fig_exp4_failure_mode_stack.png` | Stacked bar of failure modes per condition; the 75% B0 hallucination band and the B3 wrong-route climb are visible. |
@@ -39,7 +39,9 @@ For each run, we record both the outcome and the process by which it was reached
 | S3 Wrong-route risk | Logic error risk | Avoid unrelated calibration tools |
 | S4 Out-of-scope MCMC workflow | Missing specialized tool | Admit missing capability or create a new skill |
 
-## Table 4.9. Failure modes and recovery cost (n = 12 per condition, 3 repeats × 4 scenarios)
+## Table 4.9. Failure modes and recovery cost (n = 20 per condition, 5 repeats × 4 scenarios)
+
+Numbers are reported as observed rates over the 20 trials per condition; **n = 5 repeats per (condition, scenario) cell is modest, so the paper text frames these as controlled-condition evidence and patterns consistent across repeats, not as statistically significant tests.**
 
 | Condition | Success | Controlled failure | Hallucination | Fabricated tool | Wrong route | ask_user | **create_skill** |
 |---|---:|---:|---:|---:|---:|---:|---:|
