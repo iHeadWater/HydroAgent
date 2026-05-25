@@ -34,7 +34,20 @@ _SCENARIO = os.environ.get("EXP1_SCENARIO", "medium").lower()
 if _SCENARIO not in {"medium", "hard"}:
     raise ValueError(f"EXP1_SCENARIO must be 'medium' or 'hard', got {_SCENARIO!r}")
 
-OUTPUT_ROOT = ROOT / "results" / "paper" / ("exp1_v2" if _SCENARIO == "medium" else "exp1_v2_hard")
+# EXP1_MODE toggles between abstracted "preset" menu (objective + budget_level
+# + range_policy where budget_level is a quick/default/deep bundle of
+# rep/ngs/kstop/peps/pcento) and "freeform" menu where operator/LLM directly
+# selects every SCE-UA hyperparameter as a numeric value. Both modes use the
+# same BASINS and the same M0 default baseline; only the M1/M2 decision
+# surface and output root differ. Paper compares the two modes side-by-side.
+_MODE = os.environ.get("EXP1_MODE", "preset").lower()
+if _MODE not in {"preset", "freeform"}:
+    raise ValueError(f"EXP1_MODE must be 'preset' or 'freeform', got {_MODE!r}")
+
+_BASE_ROOT_NAME = "exp1_v2" if _SCENARIO == "medium" else "exp1_v2_hard"
+if _MODE == "freeform":
+    _BASE_ROOT_NAME = _BASE_ROOT_NAME + "_modeb"
+OUTPUT_ROOT = ROOT / "results" / "paper" / _BASE_ROOT_NAME
 TABLES_DIR = Path(__file__).resolve().parent / "tables"
 FIGURES_DIR = Path(__file__).resolve().parent / "figures"
 
@@ -119,6 +132,28 @@ METHODS = {
 }
 
 
+# Freeform-mode (EXP1_MODE=freeform) hyperparameter bounds. These are the
+# bounds the LLM and human operator are allowed to choose inside. Picked to
+# be wider than the preset bundles (quick/default/deep) so the freeform
+# operator can find values that fall between or outside preset levels.
+FREEFORM_BOUNDS = {
+    "gr4j": {
+        "rep":    (100, 2000),
+        "ngs":    (10, 200),
+        "kstop":  (10, 100),
+        "peps":   (0.001, 1.0),
+        "pcento": (0.001, 1.0),
+    },
+    "xaj": {
+        "rep":    (200, 3000),
+        "ngs":    (20, 400),
+        "kstop":  (10, 100),
+        "peps":   (0.001, 1.0),
+        "pcento": (0.001, 1.0),
+    },
+}
+
+
 @dataclass(frozen=True)
 class MenuDecision:
     objective: str = "NSE"
@@ -126,6 +161,12 @@ class MenuDecision:
     range_policy: str = "default"
     stop: bool = False
     notes: str = ""
+    # Freeform-mode fields. None = use preset bundle from budget_level.
+    rep:    int   | None = None
+    ngs:    int   | None = None
+    kstop:  int   | None = None
+    peps:   float | None = None
+    pcento: float | None = None
 
     def normalized(self) -> "MenuDecision":
         objective = self.objective.upper()
@@ -139,17 +180,69 @@ class MenuDecision:
             budget = "default"
         if policy not in RANGE_POLICIES:
             policy = "default"
-        return MenuDecision(objective, budget, policy, bool(self.stop), self.notes)
+        return MenuDecision(
+            objective, budget, policy, bool(self.stop), self.notes,
+            rep=self.rep, ngs=self.ngs, kstop=self.kstop,
+            peps=self.peps, pcento=self.pcento,
+        )
 
     def to_dict(self) -> dict[str, Any]:
         d = self.normalized()
-        return {
+        out = {
             "objective": d.objective,
             "budget_level": d.budget_level,
             "range_policy": d.range_policy,
             "stop": d.stop,
             "notes": d.notes,
         }
+        # Only include freeform fields if any was set, so preset-mode records
+        # stay backward-compatible.
+        if any(v is not None for v in (d.rep, d.ngs, d.kstop, d.peps, d.pcento)):
+            out.update({
+                "rep": d.rep, "ngs": d.ngs, "kstop": d.kstop,
+                "peps": d.peps, "pcento": d.pcento,
+            })
+        return out
+
+
+def clamp_freeform_decision(model: str, decision: "MenuDecision") -> "MenuDecision":
+    """Clamp any freeform hyperparameters to the FREEFORM_BOUNDS and enforce
+    SCE-UA structural constraints (rep >= 5 * ngs is a reasonable rule of
+    thumb so each complex sees at least ~5 trial points). Returns a new
+    MenuDecision; preset-mode decisions (all freeform fields None) pass
+    through unchanged.
+    """
+    bounds = FREEFORM_BOUNDS.get(model, FREEFORM_BOUNDS["gr4j"])
+    if all(getattr(decision, k) is None for k in ("rep", "ngs", "kstop", "peps", "pcento")):
+        return decision
+
+    def _clamp(v, lo, hi, cast):
+        if v is None:
+            return None
+        try:
+            v = cast(v)
+        except (ValueError, TypeError):
+            return None
+        return max(lo, min(hi, v))
+
+    rep    = _clamp(decision.rep,    *bounds["rep"],    int)
+    ngs    = _clamp(decision.ngs,    *bounds["ngs"],    int)
+    kstop  = _clamp(decision.kstop,  *bounds["kstop"],  int)
+    peps   = _clamp(decision.peps,   *bounds["peps"],   float)
+    pcento = _clamp(decision.pcento, *bounds["pcento"], float)
+
+    # Enforce rep >= 5 * ngs so SCE-UA isn't starved.
+    if rep is not None and ngs is not None and rep < 5 * ngs:
+        rep = 5 * ngs
+
+    return MenuDecision(
+        objective=decision.objective,
+        budget_level=decision.budget_level,
+        range_policy=decision.range_policy,
+        stop=decision.stop,
+        notes=decision.notes,
+        rep=rep, ngs=ngs, kstop=kstop, peps=peps, pcento=pcento,
+    )
 
 
 def iter_tasks(smoke: bool = False) -> list[dict[str, str]]:
@@ -238,9 +331,31 @@ def get_basin_attrs(basin_id: str, cfg: dict[str, Any]) -> dict[str, Any]:
     return {"basin_id": basin_id, "success": False}
 
 
-def budget_params(model: str, budget_level: str, trial_idx: int, repeat_idx: int = 0) -> dict[str, Any]:
-    decision = MenuDecision(budget_level=budget_level).normalized()
+def budget_params(model: str, budget_level: str, trial_idx: int, repeat_idx: int = 0,
+                  decision: "MenuDecision | None" = None) -> dict[str, Any]:
+    """Build the algorithm_params dict passed to SCE-UA.
+
+    Preset mode (decision=None or all freeform fields None):
+      params = BUDGET_MENU[model][budget_level]  + random_seed
+
+    Freeform mode (any of rep/ngs/kstop/peps/pcento is set on decision):
+      params overrides start from BUDGET_MENU[model][budget_level] (any field
+      the operator did NOT supply falls back to the preset), then the
+      operator-supplied freeform fields override per key. random_seed is
+      always trial_idx-derived (operator does not pick the seed).
+    """
+    if decision is None:
+        decision = MenuDecision(budget_level=budget_level)
+    decision = decision.normalized()
     params = dict(BUDGET_MENU[model][decision.budget_level])
+
+    # Apply any freeform overrides, after clamping to safe bounds.
+    decision = clamp_freeform_decision(model, decision)
+    for k in ("rep", "ngs", "kstop", "peps", "pcento"):
+        v = getattr(decision, k)
+        if v is not None:
+            params[k] = v
+
     params["random_seed"] = 1234 + trial_idx * 137 + repeat_idx * 1009
     return params
 
@@ -408,7 +523,9 @@ def run_trial(
     task_output = run_dir / task["task_id"] / f"repeat{repeat_idx}" / f"trial{trial_idx}"
     task_output.mkdir(parents=True, exist_ok=True)
 
-    algorithm_params = budget_params(task["model"], decision.budget_level, trial_idx, repeat_idx)
+    algorithm_params = budget_params(
+        task["model"], decision.budget_level, trial_idx, repeat_idx, decision=decision,
+    )
     param_ranges = ranges_for_policy(task["model"], decision.range_policy, task["climate_zone"], previous_best)
     param_range_file = write_range_file(task_output, task["model"], param_ranges, trial_idx)
     effective_ranges = param_ranges or default_ranges(task["model"])

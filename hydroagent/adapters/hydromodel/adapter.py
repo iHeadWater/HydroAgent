@@ -462,20 +462,37 @@ class Adapter(PackageAdapter):
     # ── internal helpers ──────────────────────────────────────────────
 
     def _inject_negated_losses(self):
-        """Add neg_nashsutcliffe / neg_kge / neg_lognashsutcliffe to LOSS_DICT."""
+        """Add neg_nashsutcliffe / neg_kge / neg_lognashsutcliffe to LOSS_DICT.
+
+        Patched 2026-05-25: spotpy.objectivefunctions.kge() calls np.corrcoef
+        which fails with "m has more than 2 dimensions" when obs/sim arrive
+        as 3D arrays. Hydromodel passes streamflow as shape (time, basin, 1)
+        on some SCE-UA code paths. Flatten obs and sim to 1D before calling
+        any spotpy objective so all three negated losses behave consistently.
+        Before this fix, the KGE objective crashed 100% of the time across
+        all HydroAgent exp1/exp2 SCE-UA calibrations (the earlier patch to
+        hydroutils.KGE was on the wrong code path — the real call site is
+        spotpy.objectivefunctions, not hydroutils).
+        """
         try:
+            import numpy as _np
             import spotpy.objectivefunctions as _sof
             from hydromodel.models.model_dict import LOSS_DICT
 
+            def _flat2(obs, sim):
+                return _np.asarray(obs).reshape(-1), _np.asarray(sim).reshape(-1)
+
             if "neg_nashsutcliffe" not in LOSS_DICT:
-                LOSS_DICT["neg_nashsutcliffe"] = lambda obs, sim: -_sof.nashsutcliffe(
-                    obs, sim
+                LOSS_DICT["neg_nashsutcliffe"] = (
+                    lambda obs, sim: -_sof.nashsutcliffe(*_flat2(obs, sim))
                 )
             if "neg_kge" not in LOSS_DICT:
-                LOSS_DICT["neg_kge"] = lambda obs, sim: -_sof.kge(obs, sim)
+                LOSS_DICT["neg_kge"] = (
+                    lambda obs, sim: -_sof.kge(*_flat2(obs, sim))
+                )
             if "neg_lognashsutcliffe" not in LOSS_DICT:
                 LOSS_DICT["neg_lognashsutcliffe"] = (
-                    lambda obs, sim: -_sof.lognashsutcliffe(obs, sim)
+                    lambda obs, sim: -_sof.lognashsutcliffe(*_flat2(obs, sim))
                 )
         except Exception:
             pass

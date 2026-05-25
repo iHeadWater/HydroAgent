@@ -19,15 +19,32 @@ import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-EXP1 = ROOT / "results" / "paper" / "exp1_v2"
+EXP1_A    = ROOT / "results" / "paper" / "exp1_v2"
+EXP1_B    = ROOT / "results" / "paper" / "exp1_v2_modeb"
+EXP1_B_V6 = ROOT / "results" / "paper" / "exp1_v2_modeb_m2_v6"
 TABLES = Path(__file__).resolve().parent / "tables"
 
-METHODS = {
-    "M0": "default_script",
-    "M1": "human_script",
-    "M2": "hydroagent_menu",
-    "M3": "random_menu",
-}
+def _pick_m2b_root() -> Path:
+    live = EXP1_B / "hydroagent_menu" / "trials.jsonl"
+    if live.exists():
+        n = sum(1 for _ in open(live, encoding="utf-8"))
+        if n >= 18:
+            return EXP1_B
+    return EXP1_B_V6 if (EXP1_B_V6 / "hydroagent_menu" / "trials.jsonl").exists() else EXP1_B
+_M2B_ROOT = _pick_m2b_root()
+
+# (label, root_dir, subdir)
+METHODS = [
+    ("M0_A_min", EXP1_A,    "default_script_min"),
+    ("M0_A",     EXP1_A,    "default_script"),
+    ("M0_A_max", EXP1_A,    "default_script_max"),
+    ("M1_A",     EXP1_A,    "human_script"),
+    ("M2_A",     EXP1_A,    "hydroagent_menu"),
+    ("M3_A",     EXP1_A,    "random_menu"),
+    ("M0_B",     EXP1_B,    "default_script"),
+    ("M1_B",     EXP1_B,    "human_script"),
+    ("M2_B",     _M2B_ROOT, "hydroagent_menu"),
+]
 
 
 def _metric(r: dict, period: str, name: str):
@@ -38,17 +55,17 @@ def _metric(r: dict, period: str, name: str):
 
 def _dec_time(r: dict, method: str) -> float:
     """Decision time in seconds for a single trial, by method semantics."""
-    if method == "M1":
+    if method.startswith("M1"):
         return r.get("active_seconds") or 0
-    if method == "M2":
+    if method.startswith("M2"):
         return (r.get("llm_tokens") or {}).get("decision_elapsed_s") or 0
     return 0  # M0, M3 have no decision step
 
 
 def main() -> None:
     rows = []
-    for label, sub in METHODS.items():
-        path = EXP1 / sub / "trials.jsonl"
+    for label, root, sub in METHODS:
+        path = root / sub / "trials.jsonl"
         if not path.exists():
             continue
         records = [json.loads(l) for l in open(path, encoding="utf-8")]
@@ -61,8 +78,8 @@ def main() -> None:
                 "trial_idx": r.get("trial_idx") or ord_idx,
                 "decision_time_s": round(_dec_time(r, label), 2),
                 "decision_time_kind": (
-                    "human_active" if label == "M1"
-                    else "llm_decision_elapsed" if label == "M2"
+                    "human_active" if label.startswith("M1")
+                    else "llm_decision_elapsed" if label.startswith("M2")
                     else "none"
                 ),
                 "prompt_tokens":     tok.get("prompt_tokens") or 0,

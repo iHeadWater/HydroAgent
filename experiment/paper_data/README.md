@@ -46,3 +46,29 @@ paper_data/
   variance, see PAPER_DATA_INDEX.md for the per-experiment analysis.
 - exp1 raw data is NOT in this snapshot because the M0/M1/M2 re-runs
   under the post-fix code are still in progress.
+
+## exp1 snapshot (added 2026-05-25)
+
+```
+paper_data/
+├── exp1_v2/
+│   ├── default_script.jsonl           # M0 default (5 records)
+│   ├── default_script_min.jsonl       # M0_min rep=100 ngs=10 (5)
+│   ├── default_script_max.jsonl       # M0_max rep=2000 ngs=200 (5)
+│   └── hydroagent_menu_M2A.jsonl      # M2 Mode A preset menu (25)
+├── exp1_v2_modeb/
+│   └── human_script_M1B.jsonl         # M1 Mode B human freeform (25)
+└── exp1_v2_modeb_m2_v6/
+    └── hydroagent_menu_M2B_v6.jsonl   # M2 Mode B freeform LLM v6 (22)
+```
+
+Notes for exp1:
+- All records use post-seedfix SCE-UA seed (`hydroagent/config.py` `pop()`→`get()`
+  fix in commit 7fa602a). Each trial's `algorithm_params.random_seed` matches
+  the trial_idx-derived value `1234 + trial_idx*137`.
+- M2 Mode B v6 prompt = SCE-UA-aware decision tree + diversification rule +
+  single 01543000 example. v7 prompt (4-archetype few-shot from M1 winning
+  traces) is in-progress; when v7 produces 25 records it will replace v6 in
+  the canonical M2_B location.
+- M1 Mode B (human) jsonl includes the operator's `notes` field and per-trial
+  decision time in `active_seconds`.

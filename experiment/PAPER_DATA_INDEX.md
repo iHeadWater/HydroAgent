@@ -24,31 +24,45 @@ LLM backend: DeepSeek `deepseek-v4-flash` for every agent run. DiagScore rater (
 
 Basin list is in `experiment/exp1/common.py:BASINS`. XAJ is excluded because the screen produced only one XAJ medium-difficulty candidate.
 
-**Current data status.**
+**Current data status (post-seedfix, all 6 methods complete on 5 basins).**
 
 | Method | Status | Records | Notes |
 |---|---|---:|---|
-| M0 default_script         | ✓ done | 5/5 | default menu, single run per basin |
-| M1 human_runner           | in progress | 9/25 | operator running interactively; first 5 trials were 1/basin with `stop=True`, then 4 second-trials added |
-| M2 hydroagent_menu **v2** | ✓ done | 25/25 | **trial 1 forced to default (baseline anchor)**, trials 2-5 LLM-chosen. v1 (LLM-from-t1) preserved at `results/paper/exp1_v2_m2_v1/` |
-| M3 random_menu            | not started | — | optional, lower-bound reference |
+| M0_min (rep=100 ngs=10)   | ✓ done | 5/5 | starving-budget baseline (panel mean +0.452) |
+| M0_default (rep=500 ngs=50) | ✓ done | 5/5 | standard preset (panel mean +0.461) |
+| M0_max (rep=2000 ngs=200) | ✓ done | 5/5 | brute-force max budget (panel mean +0.514) |
+| M2_A (Mode A preset menu, LLM) | ✓ done | 25/25 | 5 trials/basin, trial 1 forced default anchor (panel mean +0.502) |
+| **M1_B** (Mode B free-form, human) | ✓ done | 25/25 | **5 trials/basin** (panel mean **+0.574**) |
+| M2_B v6 (Mode B free-form, LLM) | ✓ done | 22/22 | 5 trials/basin, panel mean +0.539; v6 prompt = SCE-UA-aware decision tree + diversification rule + single example. v7 (4-archetype few-shot) is in-progress. |
+| M3 random_menu            | not started | — | optional lower-bound reference |
 
-**Evidence vs README — token-for-time supported on this panel, with two paper-grade narratives:**
-- **Non-inferiority on NSE (M2 v2 = M0 on every basin)**: Panel means M0 +0.542, M1 +0.548, M2 v2 +0.542. M2 v2 best NSE equals M0 default exactly on every basin (the trial-1 anchor floors it); the residual 0.006 gap to M1 comes entirely from one basin (03574500) where the human picked `range=wide` on trial 1 and M2 v2 explored 4 other non-default menus without hitting `wide`.
-- **Outlier eliminated by trial-1 anchor (deployment lesson)**: M2 v1 (LLM-from-trial-1) had one basin (06885500) where the LLM picked `climate_prior` on trial 1 and got 0.458, dragging M2 v1 panel mean to +0.532. M2 v2 (trial-1 forced default) records 0.505 = M0 on that basin and lifts the panel mean back to +0.542. The fix is a one-line policy: anchor the first trial of any agent-driven menu loop on the default, then explore. The forced trial uses 0 LLM tokens and 0 decision time.
-- **Token-for-time at equal NSE**: M1 spent 211.8 s of attended human active time across 9 trials (mean 23.5 s/trial); M2 v2 spent 290.3 s of unattended LLM decision-elapsed time and 40 860 tokens across 25 trials (with 5 forced trials at 0 tokens, the LLM-only mean is ~14.5 s and ~2 k tokens per decision). At a like-for-like deployment with `MAX_TRIALS=1`, the cost compresses to ~125 s wall + 0 tokens per basin.
-- **Vocabulary gap (Finding 2)**: LLM 5-trial search on 03574500 explored `climate_prior` / `boundary_expand` / `deep` / etc. but never picked `wide`, the menu the human picked from intuition that lifted NSE +0.034. The remaining M1−M2 v2 gap (+0.006 panel mean) is entirely this one basin.
-- **Process convergence**: M1 chose `stop=True` early, M2 v1 chose `stop=True` on trial 5 with "default is best" notes, M2 v2 inherits the default as trial 1 so the stop is implicit.
-- **Limitation**: panel is medium-difficulty (default NSE in [0.40, 0.65]); §4.2 covers hard-tail behaviour.
+**Evidence vs README — five paper-grade findings, all post-seedfix:**
+- **Finding 1: Budget is a real lever (+0.062 panel NSE from M0_min → M0_max) but not enough.** M0_max +0.514 < M1_B +0.574, so human menu tuning adds another +0.060 on top of max budget by choosing range_policy. Two independent levers.
+- **Finding 2: Mode B (free-form numeric hyperparameters) beats Mode A (preset bundles) for the LLM** by +0.037 panel NSE (M2_B +0.539 vs M2_A +0.502). LLM uses intermediate values (e.g. rep=750–1500, ngs=80–100) that presets cannot express.
+- **Finding 3: No single dominant strategy.** Per-basin global best: M1_B wins 3/5 (01543000, 03574500, 07197000), M0_min wins 1/5 (05495000), M0_max wins 1/5 (06885500). Optimal recipe is basin-specific.
+- **Finding 4: Counter-intuitive — on basin 05495000 the smallest budget wins.** M0_min 0.592 > M0_max 0.585 > all menu-tuning methods. Basin's default range already at SCE-UA's train-side optimum; more budget produces light test-side overfitting.
+- **Finding 5: Human-LLM gap is +0.035 panel NSE, attributable to "despite-dip persistence"** intuition. On 03574500 the human got 0.737 by persisting with `wide` range across a t3 dip; LLM Mode B v6 abandoned `wide` after one weak trial and stopped at 0.611. v7 prompt (4-archetype few-shot from human winning traces) is the targeted fix and is running.
+
+**Cost analysis at equal 5-trial budget (panel total):**
+- M1_B: 1 276 s attended human-active time (~21 min) + 0 LLM tokens.
+- M2_B v6: 287 s unattended LLM decision time + 63 457 LLM tokens (~$0.04 at deepseek-v4-flash).
+- M2_A: 196 s unattended LLM decision + 35 034 tokens.
+- LLM is ~4× faster per decision than the human and unattended, at a 0.035 NSE accuracy cost.
 
 **Paper materials.**
 - README: `experiment/exp1/README.md`
-- **Paper-text draft: `experiment/exp1/paper_text_exp1.md`** (M0/M2 final + open slots for M1/M3). Contains a "Tables and files" mapping section explaining the median-vs-best discrepancy between `table2_core_results.csv` (median) and the in-text Table 3.2 (best).
+- **Paper-text draft: `experiment/exp1/paper_text_exp1.md`** (full 6-method 5-finding narrative + 4.2 cost analysis + 4.3 limitations).
 - Tables: `experiment/exp1/tables/`
-  - `table_exp1_per_trial.csv` (30 rows now; per-method per-basin per-trial cost + menu choice + metrics + boundary_hits). Built by `experiment/exp1/build_per_trial_table.py`; rerun after M1/M3 to extend.
-  - `table1_methods.csv`, `table2_core_results.csv` (median NSE), `tableS1_task_level_results.csv` (compile pipeline outputs).
-- Figures: `experiment/exp1/figures/` — figures pending; basin trajectory + cost scatter to be generated when M1/M3 arrive.
-- Raw records: `results/paper/exp1_v2/<method>/trials.jsonl`.
+  - `table_exp1_cross_mode_summary.csv` (30 rows, 5 basin × 6 method, best test NSE/KGE + total cost). **The central table for Findings 1–4.**
+  - `table_exp1_method_aggregate.csv` (6 rows, panel-mean per method). **For Finding 5 and §4.2.**
+  - `table_exp1_per_trial.csv` (92 rows; per-method per-trial cost + menu + metrics + boundary_hits). Built by `build_per_trial_table.py`.
+  - `table_exp1_per_step_time.csv` (92 rows; same-unit decision time for token-for-time claim). Built by `build_per_step_time.py`.
+- Figures: `experiment/exp1/figures/`
+  - `fig_exp1_per_basin_winner.png` — 6-method × 5-basin bar chart with golden-star marking the per-basin global best (Findings 3+4 visual).
+  - `fig_exp1_budget_ablation.png` — best NSE vs budget level (M0_min/M0/M0_max), one line per basin, M1_B as dotted reference (Finding 1 visual).
+  - `fig_exp1_cost_vs_quality.png` — two-panel scatter of (wall time, NSE) and (human-attended-or-tokens, NSE) (§4.2 visual).
+  - `fig1_noninferiority.png` / `fig2_search_efficiency.png` / `figS1_token_breakdown.png` (legacy from earlier compile pipeline; will be regenerated or deprecated).
+- Raw records: `results/paper/exp1_v2/<method>/trials.jsonl` (Mode A + M0 ablation) and `results/paper/exp1_v2_modeb/<method>/trials.jsonl` (Mode B); M2_B v6 backup at `results/paper/exp1_v2_modeb_m2_v6/`.
 
 ---
 

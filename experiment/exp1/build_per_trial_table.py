@@ -16,15 +16,40 @@ import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-EXP1 = ROOT / "results" / "paper" / "exp1_v2"
+EXP1_A     = ROOT / "results" / "paper" / "exp1_v2"            # Mode A (preset)
+EXP1_B     = ROOT / "results" / "paper" / "exp1_v2_modeb"      # Mode B canonical (live)
+EXP1_B_V6  = ROOT / "results" / "paper" / "exp1_v2_modeb_m2_v6"  # last full v6 backup
 TABLES = Path(__file__).resolve().parent / "tables"
 
-METHODS = {
-    "M0": "default_script",
-    "M1": "human_script",
-    "M2": "hydroagent_menu",
-    "M3": "random_menu",
-}
+# For M2_B, prefer the canonical live dir if it has ≥ N_FULL records (a full
+# 25-trial run); otherwise fall back to the most-recent backed-up version (v6)
+# so paper analysis stays usable while a new M2_B rerun is in progress.
+import json as _json
+def _pick_m2b_root() -> Path:
+    live = EXP1_B / "hydroagent_menu" / "trials.jsonl"
+    if live.exists():
+        n = sum(1 for _ in open(live, encoding="utf-8"))
+        if n >= 18:  # at least most of 5 basins × 4 trials worth
+            return EXP1_B
+    return EXP1_B_V6 if (EXP1_B_V6 / "hydroagent_menu" / "trials.jsonl").exists() else EXP1_B
+
+_M2B_ROOT = _pick_m2b_root()
+
+# All methods × both modes + the M0 budget ablation.
+# Method label format: M{0,1,2,3}_{A,B} except the M0 ablation variants which
+# carry the budget level in their label so paper text can cite them directly.
+METHODS = [
+    # (label,         root_dir,    subdir,                 mode_letter)
+    ("M0_A_min",      EXP1_A,      "default_script_min",     "A"),
+    ("M0_A",          EXP1_A,      "default_script",         "A"),
+    ("M0_A_max",      EXP1_A,      "default_script_max",     "A"),
+    ("M1_A",          EXP1_A,      "human_script",           "A"),
+    ("M2_A",          EXP1_A,      "hydroagent_menu",        "A"),
+    ("M3_A",          EXP1_A,      "random_menu",            "A"),
+    ("M0_B",          EXP1_B,      "default_script",         "B"),
+    ("M1_B",          EXP1_B,      "human_script",           "B"),
+    ("M2_B",          _M2B_ROOT,   "hydroagent_menu",        "B"),
+]
 
 
 def _metric(rec: dict, period: str, name: str):
@@ -40,22 +65,29 @@ def _tok(rec: dict, field: str) -> int:
 
 def main() -> None:
     rows = []
-    for label, sub in METHODS.items():
-        path = EXP1 / sub / "trials.jsonl"
+    for label, root, sub, mode_letter in METHODS:
+        path = root / sub / "trials.jsonl"
         if not path.exists():
             continue
         records = [json.loads(l) for l in open(path, encoding="utf-8")]
         # trial_idx may be None in older M2 records; sort by record order then.
         for ord_idx, r in enumerate(records, start=1):
             dec = r.get("decision") or {}
+            ap = r.get("algorithm_params") or {}
             rows.append({
                 "method": label,
+                "mode": mode_letter,
                 "basin_id": r.get("basin_id"),
                 "model": r.get("model"),
                 "trial_idx": r.get("trial_idx") or ord_idx,
                 "objective": dec.get("objective"),
                 "budget_level": dec.get("budget_level"),
                 "range_policy": dec.get("range_policy"),
+                "rep":    ap.get("rep"),
+                "ngs":    ap.get("ngs"),
+                "kstop":  ap.get("kstop"),
+                "peps":   ap.get("peps"),
+                "pcento": ap.get("pcento"),
                 "stop_flag": dec.get("stop"),
                 "notes": (dec.get("notes") or "")[:120],
                 "train_NSE": _metric(r, "train", "NSE"),

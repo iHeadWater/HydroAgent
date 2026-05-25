@@ -1,0 +1,7 @@
+method,n_basins,mean_best_NSE,stdev_best_NSE,mean_n_trials,total_tokens_panel,total_wall_s_panel,total_active_s_panel,total_llm_dec_s_panel
+M0_min,5,0.4522,0.1211,1,0,132.0,0,0
+M0,5,0.4609,0.1132,1,0,634.0,0,0
+M0_max,5,0.514,0.114,1,0,3554.0,0,0
+M2_A,5,0.5015,0.073,5,35034,2928.0,0,196.0
+M1_B,5,0.5743,0.0993,5,0,4855.0,1276.0,0
+M2_B,5,0.5393,0.0559,4.4,63457,4752.0,0,287.0
