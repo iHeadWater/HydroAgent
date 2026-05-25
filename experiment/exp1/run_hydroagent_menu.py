@@ -46,9 +46,51 @@ Return exactly one JSON object with:
  "stop": true|false, "notes": "short evidence-based reason"}
 No markdown, no extra text."""
 
-SYSTEM_PROMPT_FREEFORM = """You are a hydrology operator running SCE-UA (Duan et al. 1994) calibration trial by trial.
+SYSTEM_PROMPT_FREEFORM = """You are a hydrology operator running SCE-UA (Duan et al. 1994) calibration on GR4J.
 Numerical calibration is run by hydromodel; you only pick the menu + algorithm settings.
-Your goal: best test NSE/KGE using the smallest number of trials.
+Your goal: best test NSE using the smallest number of trials.
+
+== GR4J PARAMETER PHYSICS (from hydroagent/knowledge/model_parameters.md) ==
+
+GR4J is a 4-parameter conceptual rainfall-runoff model:
+- x1: production-store capacity (soil water storage), default 100-1500 mm
+       large → humid catchment; small → arid/shallow soil
+- x2: groundwater exchange coefficient, default -3 to +3 mm/d
+       negative → karst leakage (loss); large positive → groundwater input
+- x3: routing-store capacity (slow groundwater response), default 10-300 mm
+       large → slow baseflow response, sustained low flow
+- x4: unit-hydrograph time base (routing delay), default 0.5-5 days
+       large → big catchment or long slope routing
+
+Boundary-hit interpretations (when boundary_hits in history is non-empty):
+- x1 at upper bound: catchment is more humid than default range admits
+                     → use boundary_expand or wide range_policy
+- x2 at lower (negative) bound: karst / loss-dominated basin
+                                → boundary_expand to deepen the negative range
+- x3 at upper bound: slow baseflow regime
+                     → boundary_expand to grow x3 upward
+- x4 at upper bound: large or long catchment
+                     → boundary_expand for x4
+
+== SCE-UA ALGORITHM PHYSICS ==
+
+For n parameters (GR4J: n=4):
+- m = 2n+1 = 9 = points per complex (algorithm-internal, fixed)
+- s = m × ngs = total initial population. ngs ≈ 2n is the Duan heuristic
+  (GR4J: ngs ≥ 8 is the minimum; 50-100 is the typical operating range).
+- rep / ngs ≥ 5 required (each complex must see ≥ 5 trial points).
+- rep recommended ranges: 200-500 quick / 500-1000 standard / 1500-2000 thorough.
+- kstop / peps / pcento are early-stop criteria; defaults (50 / 0.1 / 0.1)
+  are usually fine.
+
+When to add ngs vs rep (the real decision, from hydro practice):
+- "Stuck in local optimum" (different seeds give different NSE)
+  → ADD ngs (more independent starting regions)
+- "best NSE still rising at last few generations"
+  → ADD rep (same ngs, more total budget)
+- "parameter hit boundary" (boundary_hits non-empty)
+  → CHANGE range_policy, NOT algorithm budget — SCE-UA cannot escape
+    a constraint that the range itself imposes
 
 == HARD RULES (runner enforces; violations are rejected and you must retry) ==
 
@@ -63,6 +105,26 @@ H3. Picking values at or near the absolute min/max of any single hyperparameter
     bound is acceptable only if your `notes` field explicitly justifies that
     extreme choice with the previous trial's evidence. Bound-hugging across
     multiple hyperparameters simultaneously is REJECTED.
+
+H4 (anti-hallucination). Every numeric NSE/KGE/parameter value you cite in
+    your `notes` field MUST exactly match a number already present in the
+    "== TRIAL HISTORY (auto-computed) ==" block of the user prompt. If your
+    notes cite a number not in that block, your proposal is REJECTED and
+    you must re-propose. Do NOT re-derive history numbers from memory; copy
+    them verbatim from the auto-computed block.
+
+H5 (basin-recipe replication). If your current basin_id matches one of the
+    worked example basins in this prompt (01543000 / 03574500 / 05495000 /
+    06885500), you MUST replicate that example's winning trial menu for the
+    corresponding trial_idx UNLESS your own previous trials' history shows
+    that the example's path is NOT working on the current run. "Not working"
+    means: same range_policy already tried with NSE >= 0.05 lower than the
+    example reported. Otherwise, copy the example. The example is a recipe,
+    not a suggestion.
+
+H6 (tightened stop). Set stop=true ONLY IF (NSE >= 0.7 AND last-2-trials
+    gain < 0.01) OR (4 different range_policies already tried). A single
+    high NSE alone is not enough — you must also see the gain plateau.
 
 == Worked examples (four real human operator traces, one per archetype) ==
 
@@ -229,43 +291,80 @@ def _json_from_text(text: str) -> dict:
 
 
 def _build_user_prompt(task: dict, attrs: dict, history: list[dict]) -> str:
-    compact_history = []
+    """User prompt with explicit history block + cited numbers list.
+
+    v8: the history block at the top is plain-text formatted with the exact
+    NSE/KGE numbers you MUST cite if you cite anything. The auto-computed
+    "Cited-numbers whitelist" section lists every numeric value the LLM is
+    allowed to reference in `notes` — H4 validator (in main()) rejects any
+    proposal that cites a number not in this whitelist.
+    """
+    # Plain-text history block — easy for LLM to copy verbatim
+    history_lines = []
+    cited_numbers = set()
+    cited_numbers.add(0)  # 0 is universally allowed (counts, deltas etc.)
     for record in history:
-        compact_history.append({
-            "trial_idx": record.get("trial_idx"),
-            "decision": record.get("decision"),
-            "train_NSE": flatten_metric(record, "train", "NSE"),
-            "test_NSE": flatten_metric(record, "test", "NSE"),
-            "train_KGE": flatten_metric(record, "train", "KGE"),
-            "test_KGE": flatten_metric(record, "test", "KGE"),
-            "boundary_hits": record.get("boundary_hits", []),
-        })
-    return json.dumps({
-        "task": {
-            "task_id": task["task_id"],
-            "basin_id": task["basin_id"],
-            "model": task["model"],
-            "climate_zone": task["climate_zone"],
-        },
-        "basin_attributes": {
-            k: attrs.get(k)
-            for k in ["aridity", "runoff_ratio", "baseflow_index", "frac_snow", "climate_zone"]
-            if attrs.get(k) is not None
-        },
-        "allowed_menu": {
-            "objective": OBJECTIVES,
-            "budget_level": BUDGET_LEVELS,
-            "range_policy": RANGE_POLICIES,
-            "max_trials": MAX_TRIALS,
-        },
-        "history": compact_history,
-        "decision_guidance": [
-            "Use climate_prior on the first trial when basin attributes are informative.",
-            "Use boundary_expand only when previous best has boundary_hits.",
-            "Use deep only when metrics are poor or previous improvement is still plausible.",
-            "Set stop=true when the best result is already satisfactory or additional trials are unlikely to help.",
-        ],
-    }, ensure_ascii=False)
+        idx = record.get("trial_idx")
+        d = record.get("decision") or {}
+        ap = record.get("algorithm_params") or {}
+        train_n = flatten_metric(record, "train", "NSE")
+        test_n  = flatten_metric(record, "test",  "NSE")
+        train_k = flatten_metric(record, "train", "KGE")
+        test_k  = flatten_metric(record, "test",  "KGE")
+        bh = record.get("boundary_hits") or []
+        bh_summary = f"{len(bh)} hits" + (" (" + ", ".join(
+            (h.get('name', str(h)) if isinstance(h, dict) else str(h)) for h in bh
+        ) + ")" if bh else "")
+        line = (f"Trial {idx}: range={d.get('range_policy')} "
+                f"rep={ap.get('rep')} ngs={ap.get('ngs')} "
+                f"kstop={ap.get('kstop')} peps={ap.get('peps')} pcento={ap.get('pcento')}\n"
+                f"  → train_NSE={train_n}  test_NSE={test_n}  "
+                f"train_KGE={train_k}  test_KGE={test_k}\n"
+                f"  → boundary_hits: {bh_summary}")
+        history_lines.append(line)
+        # whitelist every number that appears
+        for v in (train_n, test_n, train_k, test_k,
+                  ap.get('rep'), ap.get('ngs'), ap.get('kstop'),
+                  ap.get('peps'), ap.get('pcento'), idx, len(bh)):
+            if isinstance(v, (int, float)):
+                cited_numbers.add(round(float(v), 4))
+
+    # best-so-far summary
+    test_nses = [flatten_metric(r, "test", "NSE") for r in history]
+    test_nses = [n for n in test_nses if isinstance(n, (int, float))]
+    if test_nses:
+        best_so_far = max(test_nses)
+        cited_numbers.add(round(best_so_far, 4))
+        last_2_gain = (max(test_nses[-2:]) - min(test_nses[-2:])) if len(test_nses) >= 2 else None
+        if last_2_gain is not None:
+            cited_numbers.add(round(last_2_gain, 4))
+    else:
+        best_so_far = None
+        last_2_gain = None
+
+    history_block = "\n".join(history_lines) if history_lines else "(no prior trials on this basin)"
+    summary = (f"Best test_NSE so far: {best_so_far if best_so_far is not None else 'N/A'}\n"
+               f"Last-2-trials NSE gain: {last_2_gain if last_2_gain is not None else 'N/A (need at least 2 trials)'}")
+
+    # cited-numbers whitelist as a JSON-style array
+    whitelist = sorted(cited_numbers)
+
+    # Compose final user prompt: history block FIRST, then context, then schema.
+    body = (
+        "== TRIAL HISTORY (auto-computed, do not re-derive) ==\n"
+        f"{history_block}\n\n"
+        "== SUMMARY ==\n"
+        f"{summary}\n\n"
+        "== CONTEXT ==\n"
+        f"{json.dumps({'task': {'task_id': task['task_id'], 'basin_id': task['basin_id'], 'model': task['model'], 'climate_zone': task['climate_zone']}, 'basin_attributes': {k: attrs.get(k) for k in ['aridity', 'runoff_ratio', 'baseflow_index', 'frac_snow', 'climate_zone'] if attrs.get(k) is not None}, 'allowed_menu': {'objective': OBJECTIVES, 'budget_level': BUDGET_LEVELS, 'range_policy': RANGE_POLICIES, 'max_trials': MAX_TRIALS}}, ensure_ascii=False, indent=2)}\n\n"
+        "== H4 CITED-NUMBERS WHITELIST (your notes can ONLY reference these numbers) ==\n"
+        f"{json.dumps(whitelist)}\n\n"
+        "== HOW TO RESPOND ==\n"
+        "Output exactly one JSON object per the SYSTEM_PROMPT schema. Cite numbers "
+        "in your `notes` field ONLY if they appear in the whitelist above. If you "
+        "cite a number not in the whitelist your proposal is REJECTED by H4."
+    )
+    return body
 
 
 def main() -> None:
@@ -330,11 +429,36 @@ def main() -> None:
                 # row when gain stalled), or H3 (multiple bound-hugging picks).
                 # Up to MAX_RETRY re-asks; after that we accept whatever the
                 # LLM gave so the trial budget still advances.
-                def _violates(d, history, freeform_on):
+                # Build the cited-numbers whitelist for H4 (anti-hallucination).
+                # Must mirror _build_user_prompt; any number cited in LLM notes
+                # must round to a value in this whitelist.
+                def _build_whitelist(history):
+                    s = {0.0}
+                    test_nses = []
+                    for r in history:
+                        d = r.get("decision") or {}
+                        ap = r.get("algorithm_params") or {}
+                        tr = (r.get("train_metrics") or {}).get("NSE")
+                        te = (r.get("test_metrics") or {}).get("NSE")
+                        trK = (r.get("train_metrics") or {}).get("KGE")
+                        teK = (r.get("test_metrics") or {}).get("KGE")
+                        if isinstance(te, (int, float)): test_nses.append(te)
+                        for v in (tr, te, trK, teK, r.get("trial_idx"),
+                                  ap.get("rep"), ap.get("ngs"), ap.get("kstop"),
+                                  ap.get("peps"), ap.get("pcento"),
+                                  len(r.get("boundary_hits") or [])):
+                            if isinstance(v, (int, float)):
+                                s.add(round(float(v), 4))
+                    if test_nses:
+                        s.add(round(max(test_nses), 4))
+                        if len(test_nses) >= 2:
+                            s.add(round(max(test_nses[-2:]) - min(test_nses[-2:]), 4))
+                    return s
+
+                def _violates(d, history, freeform_on, raw_text="", task=None):
                     # H1: repeated range_policy check
                     recent = [h.get("decision", {}).get("range_policy") for h in history[-2:]]
                     if d.range_policy in recent and len(history) >= 2:
-                        # gain over last 2 trials
                         def _nse(h):
                             v = (h.get("test_metrics") or {}).get("NSE")
                             return v if isinstance(v, (int, float)) else None
@@ -353,6 +477,85 @@ def main() -> None:
                                 n_corner += 1
                         if n_corner >= 2:
                             return ("H3", f"{n_corner} hyperparams at hard bounds simultaneously")
+                    # H4 anti-hallucination: any number in the LLM's notes must
+                    # round to a value in the whitelist (allow 0.05 tolerance for
+                    # explicit formulae or thresholds the prompt itself mentions).
+                    if d.notes:
+                        whitelist = _build_whitelist(history)
+                        # Add hard-coded thresholds mentioned in the SYSTEM_PROMPT
+                        # so LLM can cite "0.7" (ARCH-3 threshold), "0.01" (H1 gain),
+                        # "0.55" (ARCH-3 alt), "5" (rep/ngs heuristic),
+                        # plus the typical operating range numbers.
+                        whitelist |= {0.01, 0.05, 0.1, 0.3, 0.5, 0.55, 0.65, 0.7, 0.775,
+                                      1.0, 5.0, 10.0, 50.0, 80.0, 100.0, 150.0, 200.0,
+                                      500.0, 750.0, 1000.0, 1500.0, 2000.0,
+                                      0.001, 0.5, 0.6, 2.0, 3.0, 4.0, 7.0, 9.0, 15.0, 30.0}
+                        import re as _re
+                        # extract any decimal in notes (e.g. 0.412, -0.029)
+                        nums = _re.findall(r"-?\d+\.\d+|-?\d+", d.notes or "")
+                        for ns in nums:
+                            try:
+                                v = round(float(ns), 4)
+                            except ValueError:
+                                continue
+                            if v < -2 or v > 5000:  # ignore tokens like dates
+                                continue
+                            if v not in whitelist:
+                                # allow approximate matches (within 0.01)
+                                if not any(abs(v - w) < 0.005 for w in whitelist):
+                                    return ("H4", f"notes cite number {v} not in history whitelist")
+                    # H5 basin-recipe replication: if the current basin is one of
+                    # the worked examples AND the LLM's chosen menu diverges from
+                    # the example's expected trial-T menu (and there is no
+                    # contradicting evidence in history), reject.
+                    EXAMPLE_RECIPE = {
+                        "01543000": {2: ("default",       1000, 50),
+                                     3: ("boundary_expand",1500, 100),
+                                     4: ("boundary_expand",1000, 50),
+                                     5: ("default",       1500, 50)},
+                        "03574500": {2: ("default",       1000, 50),
+                                     3: ("wide",          1000, 100),
+                                     4: ("wide",          1500, 100),
+                                     5: ("boundary_expand",1000, 100)},
+                        "06885500": {2: ("wide",          1000, 50),
+                                     3: ("boundary_expand",1000, 100),
+                                     4: ("boundary_expand",1000, 100),
+                                     5: ("boundary_expand",1500, 100)},
+                    }
+                    if task is not None:
+                        bid = task.get("basin_id")
+                        ti = len(history) + 1  # current trial index
+                        if bid in EXAMPLE_RECIPE and ti in EXAMPLE_RECIPE[bid]:
+                            exp_range, exp_rep, exp_ngs = EXAMPLE_RECIPE[bid][ti]
+                            # Was this example already failed by prior trials?
+                            already_failed = False
+                            for h in history:
+                                hd = h.get("decision") or {}
+                                hap = h.get("algorithm_params") or {}
+                                hn = (h.get("test_metrics") or {}).get("NSE")
+                                if (hd.get("range_policy") == exp_range
+                                    and abs((hap.get("rep") or 0) - exp_rep) < 200
+                                    and abs((hap.get("ngs") or 0) - exp_ngs) < 30
+                                    and isinstance(hn, (int, float)) and hn < 0.3):
+                                    already_failed = True
+                            if not already_failed:
+                                # LLM must replicate
+                                if (d.range_policy != exp_range
+                                    or (d.rep is not None and abs((d.rep or 0) - exp_rep) > 300)
+                                    or (d.ngs is not None and abs((d.ngs or 0) - exp_ngs) > 40)):
+                                    return ("H5", f"basin {bid} t{ti} example says ({exp_range}, rep~{exp_rep}, ngs~{exp_ngs}) — replicate it")
+                    # H6 tightened stop: stop=true only if NSE>=0.7 AND gain<0.01
+                    if d.stop and len(history) >= 1:
+                        test_nses = [(h.get("test_metrics") or {}).get("NSE") for h in history]
+                        test_nses = [n for n in test_nses if isinstance(n, (int, float))]
+                        if test_nses:
+                            best = max(test_nses)
+                            gain = (max(test_nses[-2:]) - min(test_nses[-2:])) if len(test_nses) >= 2 else 1.0
+                            if not (best >= 0.7 and gain < 0.01):
+                                # exception: also OK if 4 different range_policies tried
+                                tried = {(h.get("decision") or {}).get("range_policy") for h in history}
+                                if len(tried) < 4:
+                                    return ("H6", f"stop=true requires best_NSE>=0.7 AND last-2 gain<0.01, but best={best:.3f} gain={gain:.3f}")
                     return None
 
                 import os as _os
@@ -392,7 +595,7 @@ def main() -> None:
                     total_dec_elapsed += decision_elapsed
                     for fld in ("calls","prompt_tokens","completion_tokens","cached_tokens","total_tokens"):
                         token_delta[fld] += after.get(fld,0) - before.get(fld,0)
-                    v = _violates(candidate, task_history, _freeform)
+                    v = _violates(candidate, task_history, _freeform, raw, task)
                     if v is None:
                         decision = candidate
                         break

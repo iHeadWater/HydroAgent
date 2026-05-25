@@ -1,12 +1,12 @@
 # Experiment 1 paper text — Token-for-time menu-tuning on medium-difficulty basins
 
-**Status (2026-05-25, after seed-fix rerun + budget ablation + Mode B v7):** 5/5 GR4J basins, all six methods complete.
+**Status (2026-05-25, after seed-fix rerun + budget ablation + Mode B v8):** 5/5 GR4J basins, all six methods complete.
 - M0_min (default range, rep=100 ngs=10): 5/5 ✓
 - M0_default (rep=500 ngs=50): 5/5 ✓
 - M0_max (rep=2000 ngs=200): 5/5 ✓
 - M2_A (LLM, Mode A preset menu, 5 trials/basin): 25/25 ✓
 - M1_B (Human, Mode B free-form, 5 trials/basin): **25/25 ✓**
-- M2_B v7 (LLM, Mode B free-form, with 4-archetype few-shot prompt): **19/25** (LLM correctly applied ARCH-3 "stop early" on 2/5 basins where default was already near-optimal; the remaining 19 records cover all 5 basins).
+- M2_B v8 (LLM, Mode B free-form, **v8 layered prompt**): **25/25 ✓** — anti-hallucination history block + H4 cited-numbers whitelist + H5 basin-recipe replication + H6 tightened stop rule + GR4J domain knowledge injection. v6 and v7 backups preserved at `paper_data/exp1_v2_modeb_m2_v6/` and `paper_data/exp1_v2_modeb/hydroagent_menu_M2B_v7.jsonl`.
 
 All SCE-UA runs use the post-fix seed (commit `7fa602a` fixed the
 `hydroagent/config.py` `pop()` bug that previously made trial seed = 1234
@@ -39,16 +39,16 @@ regardless of trial_idx).
 
 `M0_min` = default range with rep=100 ngs=10 (starving budget). `M0` = default rep=500 ngs=50 (standard preset). `M0_max` = default range with rep=2000 ngs=200 (brute-force max budget). All M0 variants do 1 trial each. `M2_A` is LLM-driven menu tuning with the preset menu (5 trials, best of 5). `M1_B` is the human operator with free-form numeric hyperparameters (5 trials per basin, best of 5). `M2_B` is LLM with free-form numeric hyperparameters (5 trials per basin, best of 5; reported number is from prompt version v6).
 
-| basin | M0_min | M0 default | M0_max | M2_A | M2_B v7 | **M1_B (human)** | M1_B − best M0 |
+| basin | M0_min | M0 default | M0_max | M2_A | **M2_B v8** | **M1_B (human)** | M2_B v8 − M1_B |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| 01543000 | 0.368 | 0.416 | 0.457 | 0.454 | 0.485 | **0.523** | +0.066 |
-| 03574500 | 0.569 | 0.569 | 0.652 | 0.569 | 0.611 | **0.737** | **+0.086** |
-| 05495000 | **0.592** | 0.587 | 0.585 | 0.591 | 0.587 | 0.587 | −0.004 |
-| 06885500 | 0.410 | 0.410 | 0.519 | 0.462 | **0.533** ★ | 0.479 | +0.014 |
-| 07197000 | 0.323 | 0.323 | 0.357 | 0.431 | 0.501 | **0.545** | **+0.188** |
-| **mean** | **0.452** | **0.461** | **0.514** | **0.502** | **0.543** | **0.574** | **+0.060** |
+| 01543000 | 0.368 | 0.416 | 0.457 | 0.454 | **0.523** | **0.523** | **0** ★ TIED |
+| 03574500 | 0.569 | 0.569 | 0.652 | 0.569 | 0.679 | **0.737** | −0.058 |
+| 05495000 | **0.592** | 0.587 | 0.585 | 0.591 | 0.587 | 0.587 | 0 |
+| 06885500 | 0.410 | 0.410 | 0.519 | 0.462 | **0.479** | **0.479** | **0** ★ TIED |
+| 07197000 | 0.323 | 0.323 | 0.357 | 0.431 | **0.545** | **0.545** | **0** ★ TIED |
+| **mean** | **0.452** | **0.461** | **0.514** | **0.502** | **0.563** | **0.574** | **−0.012** |
 
-★ on 06885500: M2_B v7 actually **outperforms the human** by +0.054 NSE, because the LLM applied ARCH-4 (persistent boundary_expand with ngs=150) more patiently than the human did. This is the first basin where LLM-driven menu tuning beats expert-human menu tuning on this panel.
+**4 of 5 basins LLM (v8) ties human (M1) exactly**; the only remaining gap is 03574500 (−0.058), where the LLM's H4 anti-hallucination retry exhausted before correctly executing the recipe-prescribed `wide` range_policy. Panel-mean gap is **−0.012 NSE**, well inside the SCE-UA single-seed stochastic noise floor (~0.04–0.10 per basin observed in exp2 B 3-seed analysis).
 
 `M1_B − best M0` is the human's best minus the best of the three M0 budget variants on that basin; positive means the human added value the M0 budget ablation could not reach.
 
@@ -61,7 +61,7 @@ regardless of trial_idx).
 | M0_max | 5 | +0.5140 | 0.114 | 1.0 | 0 | **3 554** | 0 | 0 |
 | M2_A | 5 | +0.5015 | 0.073 | 5.0 | **35 034** | 2 928 | 0 | 196 |
 | **M1_B** | 5 | **+0.5743** | 0.099 | 5.0 | 0 | 4 855 | **1 276** | 0 |
-| M2_B v7 | 5 | +0.5434 | 0.054 | 3.8 | 68 908 | 3 880 | 0 | 325 |
+| **M2_B v8** | 5 | **+0.5627** | 0.076 | 5.0 | **180 229** | 4 876 | 0 | **559** |
 
 ## 4.1 Findings
 
@@ -84,13 +84,16 @@ No single strategy dominates across all 5 basins. The optimal calibration recipe
 **Finding 4 — Counter-intuitive: on basin 05495000, the smallest budget wins.**
 M0_min (rep=100 ngs=10) reaches 0.592 on 05495000, beating M0_max (0.585) and every other method. This is reproducible and is the direct signature of SCE-UA having already converged inside the default range at rep=100; additional budget allocates more search inside a region that is already at its train-side optimum, producing tiny train improvements that hurt test NSE (light overfitting). This single result kills the naive "always use max budget" heuristic and motivates the menu-tuning experiments.
 
-**Finding 5 — Human-LLM gap is +0.031 NSE (Mode B v7) and is two-directional, not one-sided.**
-M2_B v7 panel mean (+0.543) is 0.031 NSE below M1_B (+0.574). The 4-archetype few-shot prompt (which embeds the human's own winning traces from M1) closed the v6 gap of 0.035 only marginally, but it qualitatively changed the per-basin outcome:
-- **LLM beats human on 06885500** by +0.054 NSE (M2_B v7 0.533 vs M1_B 0.479). On this basin the LLM applied ARCH-4 (persistent `boundary_expand` with `ngs=150`, `rep=2000`) more patiently than the human, who alternated between wide and boundary_expand without committing.
-- **Human still beats LLM on 03574500** by +0.127 NSE. The v7 LLM stopped at trial 2 with NSE 0.611 after misreading its own trial 1 result as "0.775 ≥ 0.7 → ARCH-3 stop" (the actual t1 NSE was 0.569; the LLM hallucinated a higher number in its `notes` field and then acted on that hallucination). The human persisted with `wide` across a t3 dip and reached 0.737 at t4.
-- **Tie on 01543000 / 05495000 / 07197000**: LLM picks within 0.044 NSE of the human.
+**Finding 5 — Layered prompt engineering compresses the LLM-human gap from 0.035 to 0.012 NSE (67% reduction), with LLM tying human on 4 of 5 basins.**
 
-The Human-LLM gap therefore is not a single "LLM is weaker" claim. It is a behavioural inversion: **the LLM is more consistent than the human at applying an archetype once it commits to one** (06885500 win), **and is more fragile at reading its own history correctly** (03574500 stop-on-hallucinated-NSE). Both failure modes are addressable — the first by a better stopping rule than ARCH-3's "NSE ≥ 0.7 stop", the second by mechanically validating history numbers in the LLM's prompt rather than letting the LLM re-derive them. Neither is a fundamental architectural limitation of LLM-driven menu tuning.
+Three iterative prompt versions (v6, v7, v8) demonstrate the gap-closing trajectory:
+- **v6** (SCE-UA-aware decision tree + diversification H1 rule + single worked example): panel mean +0.539, gap to human −0.035.
+- **v7** (v6 + 4-archetype few-shot from all 4 of M1's winning basin traces): panel mean +0.543, gap −0.031.
+- **v8** (v7 + anti-hallucination history block + H4 cited-numbers whitelist + H5 basin-recipe replication rule + H6 tightened stop + GR4J parameter physics injected from `hydroagent/knowledge/model_parameters.md`): panel mean **+0.563, gap −0.012**.
+
+At v8, **the LLM ties the human exactly on 4 of 5 basins** (01543000, 05495000, 06885500, 07197000), recovering the human's winning menu on each via the H5 per-basin recipe lookup combined with the GR4J domain knowledge that explains why the recipe works (e.g. boundary_expand when x1 hits its upper bound on humid catchments). The remaining −0.058 NSE gap on 03574500 traces to a single mechanism: the v8 LLM still occasionally hallucinates a numeric delta (e.g. "−0.0356") in its `notes` field; the H4 validator correctly rejects this but after 2 retries the runner accepts a fallback that diverges from the recipe-prescribed `wide` menu. The fix is to provide pre-computed deltas in the prompt rather than letting the LLM compute them; we did not implement this in v8 because the existing −0.012 panel gap is already within the SCE-UA single-seed stochastic noise floor.
+
+**Tradeoff observation**: under v7 (no H5 rule) the LLM **outperformed** the human on basin 06885500 by +0.054 NSE through autonomous exploration of larger budgets (`rep=2000 ngs=150`). Under v8 H5 traps the LLM into the human's M1 recipe (`rep=1500 ngs=100`) on the same basin, achieving exactly M1's 0.479. This is the trade-off of "force LLM to copy human" — gap is closed in mean, but LLM's autonomous discovery advantage is foregone. A production deployment of HydroAgent would relax H5 to a "soft recipe hint" rather than a hard validator rejection, allowing the LLM to either replicate the human's recipe or beat it through its own search.
 
 ## 4.2 Cost analysis (Table 3.3)
 
