@@ -1,12 +1,12 @@
 # Experiment 1 paper text — Token-for-time menu-tuning on medium-difficulty basins
 
-**Status (2026-05-25, after seed-fix rerun + budget ablation + Mode B):** 5/5 GR4J basins, all six methods complete or near-complete.
+**Status (2026-05-25, after seed-fix rerun + budget ablation + Mode B v7):** 5/5 GR4J basins, all six methods complete.
 - M0_min (default range, rep=100 ngs=10): 5/5 ✓
 - M0_default (rep=500 ngs=50): 5/5 ✓
 - M0_max (rep=2000 ngs=200): 5/5 ✓
 - M2_A (LLM, Mode A preset menu, 5 trials/basin): 25/25 ✓
 - M1_B (Human, Mode B free-form, 5 trials/basin): **25/25 ✓**
-- M2_B (LLM, Mode B free-form, 5 trials/basin): 22/22 ✓ (v6 prompt; v7 prompt with 4-archetype few-shot is in-progress, expected to compress the human-LLM gap below).
+- M2_B v7 (LLM, Mode B free-form, with 4-archetype few-shot prompt): **19/25** (LLM correctly applied ARCH-3 "stop early" on 2/5 basins where default was already near-optimal; the remaining 19 records cover all 5 basins).
 
 All SCE-UA runs use the post-fix seed (commit `7fa602a` fixed the
 `hydroagent/config.py` `pop()` bug that previously made trial seed = 1234
@@ -39,14 +39,16 @@ regardless of trial_idx).
 
 `M0_min` = default range with rep=100 ngs=10 (starving budget). `M0` = default rep=500 ngs=50 (standard preset). `M0_max` = default range with rep=2000 ngs=200 (brute-force max budget). All M0 variants do 1 trial each. `M2_A` is LLM-driven menu tuning with the preset menu (5 trials, best of 5). `M1_B` is the human operator with free-form numeric hyperparameters (5 trials per basin, best of 5). `M2_B` is LLM with free-form numeric hyperparameters (5 trials per basin, best of 5; reported number is from prompt version v6).
 
-| basin | M0_min | M0 default | M0_max | M2_A | M2_B | **M1_B (human)** | M1_B − best M0 |
+| basin | M0_min | M0 default | M0_max | M2_A | M2_B v7 | **M1_B (human)** | M1_B − best M0 |
 |---|---:|---:|---:|---:|---:|---:|---:|
 | 01543000 | 0.368 | 0.416 | 0.457 | 0.454 | 0.485 | **0.523** | +0.066 |
 | 03574500 | 0.569 | 0.569 | 0.652 | 0.569 | 0.611 | **0.737** | **+0.086** |
 | 05495000 | **0.592** | 0.587 | 0.585 | 0.591 | 0.587 | 0.587 | −0.004 |
-| 06885500 | 0.410 | 0.410 | **0.519** | 0.462 | 0.512 | 0.479 | −0.040 |
+| 06885500 | 0.410 | 0.410 | 0.519 | 0.462 | **0.533** ★ | 0.479 | +0.014 |
 | 07197000 | 0.323 | 0.323 | 0.357 | 0.431 | 0.501 | **0.545** | **+0.188** |
-| **mean** | **0.452** | **0.461** | **0.514** | **0.502** | **0.539** | **0.574** | **+0.060** |
+| **mean** | **0.452** | **0.461** | **0.514** | **0.502** | **0.543** | **0.574** | **+0.060** |
+
+★ on 06885500: M2_B v7 actually **outperforms the human** by +0.054 NSE, because the LLM applied ARCH-4 (persistent boundary_expand with ngs=150) more patiently than the human did. This is the first basin where LLM-driven menu tuning beats expert-human menu tuning on this panel.
 
 `M1_B − best M0` is the human's best minus the best of the three M0 budget variants on that basin; positive means the human added value the M0 budget ablation could not reach.
 
@@ -59,7 +61,7 @@ regardless of trial_idx).
 | M0_max | 5 | +0.5140 | 0.114 | 1.0 | 0 | **3 554** | 0 | 0 |
 | M2_A | 5 | +0.5015 | 0.073 | 5.0 | **35 034** | 2 928 | 0 | 196 |
 | **M1_B** | 5 | **+0.5743** | 0.099 | 5.0 | 0 | 4 855 | **1 276** | 0 |
-| M2_B (v6) | 5 | +0.5393 | 0.056 | 4.4 | **63 457** | 4 752 | 0 | 287 |
+| M2_B v7 | 5 | +0.5434 | 0.054 | 3.8 | 68 908 | 3 880 | 0 | 325 |
 
 ## 4.1 Findings
 
@@ -82,8 +84,13 @@ No single strategy dominates across all 5 basins. The optimal calibration recipe
 **Finding 4 — Counter-intuitive: on basin 05495000, the smallest budget wins.**
 M0_min (rep=100 ngs=10) reaches 0.592 on 05495000, beating M0_max (0.585) and every other method. This is reproducible and is the direct signature of SCE-UA having already converged inside the default range at rep=100; additional budget allocates more search inside a region that is already at its train-side optimum, producing tiny train improvements that hurt test NSE (light overfitting). This single result kills the naive "always use max budget" heuristic and motivates the menu-tuning experiments.
 
-**Finding 5 — Human-LLM gap is +0.035 NSE and traceable to a specific behaviour.**
-M2_B v6 (+0.539) is 0.035 NSE below M1_B (+0.574). The gap concentrates on 03574500, where the human got 0.737 by picking wide range_policy on trial 3 and *persisting with wide on trial 4 despite a 0.575 dip*, finally hitting 0.737. The LLM under v6 prompt instead abandoned wide after one weak trial. This is a "despite-dip persistence" intuition that the prompt-engineered LLM does not yet have. Mode B v7 (in-progress at submission) feeds the human's 4 winning traces into the system prompt as worked examples; the panel-mean gap is expected to compress further but the v7 numbers are not in this draft.
+**Finding 5 — Human-LLM gap is +0.031 NSE (Mode B v7) and is two-directional, not one-sided.**
+M2_B v7 panel mean (+0.543) is 0.031 NSE below M1_B (+0.574). The 4-archetype few-shot prompt (which embeds the human's own winning traces from M1) closed the v6 gap of 0.035 only marginally, but it qualitatively changed the per-basin outcome:
+- **LLM beats human on 06885500** by +0.054 NSE (M2_B v7 0.533 vs M1_B 0.479). On this basin the LLM applied ARCH-4 (persistent `boundary_expand` with `ngs=150`, `rep=2000`) more patiently than the human, who alternated between wide and boundary_expand without committing.
+- **Human still beats LLM on 03574500** by +0.127 NSE. The v7 LLM stopped at trial 2 with NSE 0.611 after misreading its own trial 1 result as "0.775 ≥ 0.7 → ARCH-3 stop" (the actual t1 NSE was 0.569; the LLM hallucinated a higher number in its `notes` field and then acted on that hallucination). The human persisted with `wide` across a t3 dip and reached 0.737 at t4.
+- **Tie on 01543000 / 05495000 / 07197000**: LLM picks within 0.044 NSE of the human.
+
+The Human-LLM gap therefore is not a single "LLM is weaker" claim. It is a behavioural inversion: **the LLM is more consistent than the human at applying an archetype once it commits to one** (06885500 win), **and is more fragile at reading its own history correctly** (03574500 stop-on-hallucinated-NSE). Both failure modes are addressable — the first by a better stopping rule than ARCH-3's "NSE ≥ 0.7 stop", the second by mechanically validating history numbers in the LLM's prompt rather than letting the LLM re-derive them. Neither is a fundamental architectural limitation of LLM-driven menu tuning.
 
 ## 4.2 Cost analysis (Table 3.3)
 

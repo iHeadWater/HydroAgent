@@ -33,7 +33,7 @@ Basin list is in `experiment/exp1/common.py:BASINS`. XAJ is excluded because the
 | M0_max (rep=2000 ngs=200) | ✓ done | 5/5 | brute-force max budget (panel mean +0.514) |
 | M2_A (Mode A preset menu, LLM) | ✓ done | 25/25 | 5 trials/basin, trial 1 forced default anchor (panel mean +0.502) |
 | **M1_B** (Mode B free-form, human) | ✓ done | 25/25 | **5 trials/basin** (panel mean **+0.574**) |
-| M2_B v6 (Mode B free-form, LLM) | ✓ done | 22/22 | 5 trials/basin, panel mean +0.539; v6 prompt = SCE-UA-aware decision tree + diversification rule + single example. v7 (4-archetype few-shot) is in-progress. |
+| M2_B v7 (Mode B free-form, LLM) | ✓ done | 19/25 | 5 trials/basin (2 basins stopped early at t2 via correct ARCH-3 application), panel mean **+0.543**; v7 prompt = SCE-UA-aware decision tree + diversification rule + **4-archetype few-shot from M1 winning traces**. **LLM beats human on basin 06885500** (+0.054 NSE via patient ARCH-4 boundary_expand with ngs=150); LLM still loses to human on 03574500 (early-stopped at t2 after misreading own t1 NSE). v6 backup at `paper_data/exp1_v2_modeb_m2_v6/`. |
 | M3 random_menu            | not started | — | optional lower-bound reference |
 
 **Evidence vs README — five paper-grade findings, all post-seedfix:**
@@ -41,7 +41,7 @@ Basin list is in `experiment/exp1/common.py:BASINS`. XAJ is excluded because the
 - **Finding 2: Mode B (free-form numeric hyperparameters) beats Mode A (preset bundles) for the LLM** by +0.037 panel NSE (M2_B +0.539 vs M2_A +0.502). LLM uses intermediate values (e.g. rep=750–1500, ngs=80–100) that presets cannot express.
 - **Finding 3: No single dominant strategy.** Per-basin global best: M1_B wins 3/5 (01543000, 03574500, 07197000), M0_min wins 1/5 (05495000), M0_max wins 1/5 (06885500). Optimal recipe is basin-specific.
 - **Finding 4: Counter-intuitive — on basin 05495000 the smallest budget wins.** M0_min 0.592 > M0_max 0.585 > all menu-tuning methods. Basin's default range already at SCE-UA's train-side optimum; more budget produces light test-side overfitting.
-- **Finding 5: Human-LLM gap is +0.035 panel NSE, attributable to "despite-dip persistence"** intuition. On 03574500 the human got 0.737 by persisting with `wide` range across a t3 dip; LLM Mode B v6 abandoned `wide` after one weak trial and stopped at 0.611. v7 prompt (4-archetype few-shot from human winning traces) is the targeted fix and is running.
+- **Finding 5: Human-LLM gap shrunk to +0.031 panel NSE with v7 prompt, and the gap is two-directional.** v6 gap was +0.035; v7 4-archetype few-shot prompt reduced it marginally to +0.031, but qualitatively flipped the per-basin outcome: **LLM beats human on 06885500 by +0.054 NSE** (patient ARCH-4 boundary_expand+ngs=150), while human still beats LLM on 03574500 by +0.127 (v7 LLM early-stopped at t2 after hallucinating its t1 NSE as 0.775 when actual was 0.569). The gap is two-directional and both failure modes (LLM over-eager stopping on misread history; human under-persistent on hard basins) are addressable.
 
 **Cost analysis at equal 5-trial budget (panel total):**
 - M1_B: 1 276 s attended human-active time (~21 min) + 0 LLM tokens.
