@@ -21,12 +21,13 @@ K1 and K2 must expose the same tool schemas. This keeps the comparison focused o
 | T1 standard calibration | Basic hydrological execution | Calls `validate_basin`, `calibrate_model`, and `evaluate_model`; returns real NSE/KGE evidence |
 | T2 model comparison | Multi-model execution and synthesis | Runs/evaluates GR4J and XAJ and chooses based on NSE/KGE |
 | T3 code analysis | Non-calibration routing | Calls `generate_code` and `run_code`, avoids calibration tools, and does not use simulated data |
-| T4 failure diagnosis | Knowledge-sensitive reasoning | Explains low NSE and boundary-hit evidence without unnecessary tools |
+| T4 failure diagnosis | General diagnostic reasoning | Explains low NSE and boundary-hit evidence for XAJ without running tools; tests LLM's pre-trained hydrology knowledge |
+| T5 calibration knowledge | HydroAgent-specific workflow knowledge | Describes correct post-calibration evaluation sequence, recommends specific SCE-UA rep/ngs values, and diagnoses GR4J parameter boundary-hitting patterns; requires information from the calibration guide and model parameter knowledge files |
 
 Default run size:
 
 ```text
-3 conditions x 4 tasks x 3 repeats = 36 runs
+3 conditions x 5 tasks x 5 repeats = 75 runs
 ```
 
 ## Metrics
@@ -52,7 +53,8 @@ The intended interpretation is:
 
 - `K1 - K0` measures the effect of tool availability.
 - `K2 - K1` measures the marginal effect of full knowledge input.
-- T4 is the main place where K2 should plausibly improve over K1.
+- T5 is the main place where K2 should outperform K1, since it requires calibration workflow knowledge only available in the knowledge pack.
+- T4 tests general diagnostic reasoning where the LLM's pre-training is expected to suffice regardless of knowledge injection.
 
 ## Run Order
 

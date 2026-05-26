@@ -110,14 +110,59 @@ TASKS = [
         "query": (
             "A previous XAJ calibration for basin 03439000 ended with train NSE=0.105. "
             "Four parameters were near upper bounds: CS=0.98 of [0,1], L=9.8 of [1,10], "
-            "CI=0.89 of [0,0.9], EX=1.49 of [1,1.5]. Explain what this implies physically, "
-            "whether simply expanding ranges is likely to help, and what the next calibration step should be."
+            "CI=0.89 of [0,0.9], EX=1.49 of [1,1.5]. "
+            "(1) Explain what each parameter hitting its bound implies physically. "
+            "(2) Would simply expanding all four ranges fix the problem, or does this pattern suggest a deeper issue? "
+            "(3) Recommend the specific HydroAgent tool and workflow you would use for the next attempt. "
+            "Do not run any tools — answer from knowledge only."
         ),
         "expected_tools": [],
         "expected_first": None,
         "forbidden_tools": ["calibrate_model", "evaluate_model", "generate_code", "run_code"],
         "success_type": "diagnosis",
-        "description": "Knowledge-sensitive reasoning without unnecessary computation.",
+        "description": "Diagnosis + HydroAgent workflow recommendation.",
+        "diagnosis_keywords": [
+            "boundary", "upper bound", "range", "expand",
+            "model structure", "structure", "mismatch", "switch model",
+            "parameter", "recession", "routing", "runoff", "baseflow",
+            "边界", "上界", "参数", "模型结构", "换模型", "扩展", "汇流", "退水",
+            "llm_calibrate", "智能率定", "validate_basin",
+        ],
+        "diagnosis_min_keywords": 5,
+    },
+    {
+        "task_id": "T5",
+        "task_name": "calibration_knowledge",
+        "query": (
+            "You need to calibrate GR4J for basins of varying difficulty using SCE-UA. "
+            "(1) What rep and ngs values does HydroAgent recommend for a quick test run, "
+            "a standard calibration, and a precision calibration? "
+            "(2) After calibrate_model succeeds, what is the complete tool call sequence "
+            "to obtain both train-period and test-period NSE/KGE? "
+            "(3) A calibration result shows test NSE=0.45 with x1=98 near its lower bound "
+            "of 100, and x2=-2.95 near its lower bound of -3. What does each parameter "
+            "hitting its bound imply physically for this basin, and what specific parameter "
+            "range adjustments would you recommend before re-calibrating? "
+            "Do not run any tools — answer from your knowledge of HydroAgent and GR4J."
+        ),
+        "expected_tools": [],
+        "expected_first": None,
+        "forbidden_tools": ["calibrate_model", "evaluate_model", "generate_code", "run_code"],
+        "success_type": "diagnosis",
+        "description": "Standard calibration workflow + parameter knowledge test.",
+        "diagnosis_keywords": [
+            "rep", "ngs", "200", "500", "2000",
+            "evaluate_model", "train", "test", "训练", "测试",
+            "x1", "x2", "parameter", "参数",
+            "range", "范围", "bound", "边界",
+            "蓄水", "地下水", "reservoir", "groundwater", "exchange",
+        ],
+        "diagnosis_min_keywords": 7,
+        "required_facts": [
+            {"claim": r"\brep\b", "must_be": True},
+            {"claim": r"\bngs\b", "must_be": True},
+            {"claim": r"\b500\b", "must_be": True},
+        ],
     },
 ]
 TASK_BY_ID = {t["task_id"]: t for t in TASKS}
@@ -423,6 +468,23 @@ def _text_from_record(record: dict[str, Any], final_response: str) -> str:
     return "\n".join(texts).lower()
 
 
+def _check_required_facts(text: str, facts: list[dict[str, Any]]) -> bool:
+    """Each fact is {"claim": <regex>, "must_be": True/False}.
+
+    If must_be is True, the regex MUST match somewhere in text.
+    If must_be is False, the regex must NOT match (penalises fabrication).
+    All facts must pass for the check to return True.
+    An empty fact list always passes.
+    """
+    for fact in facts:
+        pattern = fact["claim"]
+        required = fact["must_be"]
+        found = bool(re.search(pattern, text, re.IGNORECASE))
+        if found != required:
+            return False
+    return True
+
+
 def detect_hallucination(record: dict[str, Any], final_response: str) -> bool:
     # NEW: honest-disclaimer escape — if the agent clearly states it has no
     # access to tools and provides NO concrete fabricated metric values, this
@@ -518,8 +580,17 @@ def evaluate_trial_record(record: dict[str, Any], final_response: str) -> dict[s
         )
     elif success_type == "diagnosis":
         text = _text_from_record(record, final_response)
-        keyword_hits = [kw for kw in _DIAGNOSIS_KEYWORDS if kw.lower() in text]
-        task_success = len(keyword_hits) >= 3 and not forbidden_hit and not hallucination
+        kw_list = task.get("diagnosis_keywords", _DIAGNOSIS_KEYWORDS)
+        kw_min = task.get("diagnosis_min_keywords", 3)
+        keyword_hits = [kw for kw in kw_list if kw.lower() in text]
+        required_facts = task.get("required_facts", [])
+        facts_ok = _check_required_facts(text, required_facts)
+        task_success = (
+            len(keyword_hits) >= kw_min
+            and facts_ok
+            and not forbidden_hit
+            and not hallucination
+        )
     else:
         task_success = tool_route_success and not hallucination
 

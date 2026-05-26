@@ -1,4 +1,4 @@
 condition_id,condition_name,n_runs,task_success_rate,tool_route_success_rate,first_tool_accuracy,forbidden_tool_rate,hallucination_rate,mean_llm_calls,mean_tool_calls,mean_total_tokens,mean_prompt_tokens,mean_completion_tokens,mean_cached_tokens,mean_wall_time_s,mean_tool_compute_time_s,mean_llm_decision_time_s,mean_knowledge_input_tokens_est,tokens_per_success,success_gain_vs_K0,success_gain_vs_K1,extra_tokens_vs_K1,marginal_gain_per_10k_tokens
-K0,plain_llm,20,0.25,0.25,0.25,0.0,0.15,1.0,0.0,1816.85,103.75,1713.1,19.2,24.9631,0.0,24.9631,0.0,7267.4,,,,
-K1,tools_only,20,0.85,0.9,1.0,0.1,0.0,8.75,9.1,55995.65,51205.8,4789.85,44160.0,160.8979,129.34345,31.55445,0.0,65877.235294,0.6,,,
-K2,full_knowledge,20,0.75,0.75,1.0,0.25,0.0,9.45,9.45,128639.05,122562.4,6076.65,113600.0,212.9209,165.3118,47.6091,3151.4,171518.733333,,-0.1,72643.4,-0.013766
+K0,plain_llm,25,0.28,0.4,0.4,0.0,0.12,1.0,0.0,1862.04,134.0,1728.04,40.96,22.91684,0.0,22.91684,0.0,6650.142857,,,,
+K1,tools_only,25,0.96,0.96,1.0,0.04,0.0,5.04,4.6,29986.92,26145.8,3841.12,22241.28,127.79572,99.83432,27.9614,0.0,31236.375,0.68,,,
+K2,full_knowledge,25,1.0,1.0,1.0,0.0,0.0,5.76,5.84,78098.96,73745.8,4353.16,68111.36,161.3388,125.10276,36.23604,3151.64,78098.96,,0.04,48112.04,0.008314
