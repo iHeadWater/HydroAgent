@@ -61,7 +61,6 @@ Basin list is in `experiment/exp1/common.py:BASINS`. XAJ is excluded because the
   - `fig_exp1_per_basin_winner.png` — 6-method × 5-basin bar chart with golden-star marking the per-basin global best (Findings 3+4 visual).
   - `fig_exp1_budget_ablation.png` — best NSE vs budget level (M0_min/M0/M0_max), one line per basin, M1_B as dotted reference (Finding 1 visual).
   - `fig_exp1_cost_vs_quality.png` — two-panel scatter of (wall time, NSE) and (human-attended-or-tokens, NSE) (§4.2 visual).
-  - `fig1_noninferiority.png` / `fig2_search_efficiency.png` / `figS1_token_breakdown.png` (legacy from earlier compile pipeline; will be regenerated or deprecated).
 - Raw records: `results/paper/exp1_v2/<method>/trials.jsonl` (Mode A + M0 ablation) and `results/paper/exp1_v2_modeb/<method>/trials.jsonl` (Mode B); M2_B v6 backup at `results/paper/exp1_v2_modeb_m2_v6/`.
 
 ---

@@ -21,9 +21,9 @@ regardless of trial_idx).
 | Table 3.3 (method-level aggregate) | `experiment/exp1/tables/table_exp1_method_aggregate.csv` | One row per method with panel mean + stdev best test NSE, total cost. |
 | Per-trial breakdown | `experiment/exp1/tables/table_exp1_per_trial.csv` | 92 rows. One per (method, basin, trial). Columns: `objective`, `budget_level`, `range_policy`, `rep`, `ngs`, `kstop`, `peps`, `pcento`, `stop_flag`, train+test NSE+KGE, prompt/completion/cached/total tokens, `llm_decision_time_s`, `wall_time_s`, `active_seconds`, `boundary_hits`, `error`. |
 | Per-step decision-time | `experiment/exp1/tables/table_exp1_per_step_time.csv` | One row per (method, basin, trial). `decision_time_s` = `active_seconds` for M1 (human typing the menu choice) and `llm_decision_elapsed_s` for M2 (LLM call latency). Direct same-unit comparison for the "token-for-time" claim. |
-| Fig 1 non-inferiority | `experiment/exp1/figures/fig1_noninferiority.png` | (planned) M1 vs M2 best NSE scatter with ±0.05 NSE bands. |
-| Fig 2 budget ablation | `experiment/exp1/figures/fig2_search_efficiency.png` | (planned) Best NSE vs budget level (M0_min/M0/M0_max) + M1/M2 best as horizontal references per basin. |
-| Fig 3 per-basin trajectory | (planned) | best-so-far NSE vs trial index, M1 vs M2 vs M2 Mode B. |
+| Fig per-basin winner | `experiment/exp1/figures/fig_exp1_per_basin_winner.png` | 6-method x 5-basin bar chart; golden star marks per-basin global best test NSE (Findings 3+4). |
+| Fig budget ablation | `experiment/exp1/figures/fig_exp1_budget_ablation.png` | Best NSE vs budget level (M0_min/M0/M0_max), one line per basin, M1_B dotted reference (Finding 1). |
+| Fig cost vs quality | `experiment/exp1/figures/fig_exp1_cost_vs_quality.png` | Two-panel scatter: (wall time, NSE) and (human-attended-or-tokens, NSE). Used in 4.2. |
 
 ## Table 3.1. Basin panel (5 GR4J basins)
 
@@ -123,10 +123,9 @@ The LLM is therefore ~4× faster per decision than the human and the decision ti
 
 ## Figures
 
-- **Figure 1** `experiment/exp1/figures/fig1_noninferiority.png` — pending: planned as M1 vs M2_B best-NSE scatter against 1:1 with ±0.05 band.
-- **Figure 2** `experiment/exp1/figures/fig2_search_efficiency.png` — pending: planned as best-so-far median test NSE vs trial index, M1_B vs M2_B vs M2_A overlaid, with M0_min/M0/M0_max as horizontal reference lines.
-- **Figure 3** (new) — planned: per-basin best NSE bar chart across the 6 methods, highlighting the basin-by-basin winner heterogeneity (Finding 3).
-- **Figure S1** `experiment/exp1/figures/figS1_token_breakdown.png` — pending: M2_A vs M2_B token breakdown.
+- **Per-basin winner** `experiment/exp1/figures/fig_exp1_per_basin_winner.png` — 6-method x 5-basin bar chart with a golden-star per-basin global best (visual for Findings 3+4).
+- **Budget ablation** `experiment/exp1/figures/fig_exp1_budget_ablation.png` — best test NSE vs budget level (M0_min/M0/M0_max), one line per basin, M1_B as dotted reference (visual for Finding 1).
+- **Cost vs quality** `experiment/exp1/figures/fig_exp1_cost_vs_quality.png` — two-panel scatter of (wall time, NSE) and (human-attended-or-tokens, NSE) (visual for 4.2).
 
 ## Methodology recap
 

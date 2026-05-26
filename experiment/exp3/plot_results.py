@@ -75,11 +75,16 @@ def _plot_task_heatmap(compiled: dict, out: Path) -> None:
     ax.set_xticklabels([c["condition_id"] for c in CONDITIONS])
     ax.set_yticks(range(len(TASKS)))
     ax.set_yticklabels([f"{t['task_id']} {t['task_name']}" for t in TASKS])
+    # YlGnBu colormap is dark above ~0.55, so flip annotation color to white
+    # there to keep numbers legible against the dark cells.
     for i in range(arr.shape[0]):
         for j in range(arr.shape[1]):
             val = arr[i, j]
-            label = "" if np.isnan(val) else f"{val:.2f}"
-            ax.text(j, i, label, ha="center", va="center", color="#111111", fontsize=9)
+            if np.isnan(val):
+                continue
+            text_color = "#FFFFFF" if val > 0.55 else "#111111"
+            ax.text(j, i, f"{val:.2f}", ha="center", va="center",
+                    color=text_color, fontsize=10, fontweight="bold")
     ax.set_xlabel("Knowledge input condition")
     ax.set_title("Task success rate")
     fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)

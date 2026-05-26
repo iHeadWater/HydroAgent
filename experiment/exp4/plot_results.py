@@ -44,7 +44,8 @@ def _plot_failure_stack(compiled: dict, out) -> None:
     ax.set_ylim(0, 1.05)
     ax.set_ylabel("Rate")
     ax.set_xlabel("Tool condition")
-    ax.legend(frameon=False, ncol=2)
+    ax.legend(frameon=False, ncol=4, loc="upper center",
+              bbox_to_anchor=(0.5, -0.12), fontsize=9)
     ax.grid(axis="y", color="#DDDDDD", linewidth=0.7, alpha=0.85)
     ax.set_axisbelow(True)
     fig.tight_layout()
@@ -76,7 +77,7 @@ def _plot_recovery_cost(compiled: dict, out) -> None:
         ("create_skill_rate",   "create_skill",     "#7570B3"),
     ]
 
-    fig, ax = plt.subplots(figsize=(8.5, 4.8))
+    fig, ax = plt.subplots(figsize=(10.5, 4.8))
     x = np.arange(len(conditions))
     width = 0.20
     for i, (key, label, color) in enumerate(metrics):
@@ -90,12 +91,12 @@ def _plot_recovery_cost(compiled: dict, out) -> None:
                         f"{int(round(v*100))}%", ha="center", fontsize=8)
 
     ax.set_xticks(x)
-    ax.set_xticklabels([f"{c}\n({_condition_label(c)})" for c in conditions])
+    ax.set_xticklabels([f"{c} {_condition_label(c)}" for c in conditions], fontsize=9)
     ax.set_ylabel("Rate (n = 20 per condition)")
     ax.set_title("Failure-mode + dynamic-recovery comparison across tool conditions")
     ax.set_ylim(0, 1.0)
     ax.axhline(0.0, color="#888888", linewidth=0.8)
-    ax.legend(ncol=4, loc="upper center", bbox_to_anchor=(0.5, -0.10),
+    ax.legend(ncol=4, loc="upper center", bbox_to_anchor=(0.5, -0.13),
               frameon=False, fontsize=9)
     ax.grid(axis="y", alpha=0.3)
     fig.tight_layout()
@@ -105,8 +106,8 @@ def _plot_recovery_cost(compiled: dict, out) -> None:
 
 def _condition_label(cid: str) -> str:
     return {"B0": "basic", "B1": "full toolchain",
-            "B2": "+create_skill", "B3": "+create_skill\n+policy",
-            "B4": "base+create_skill\n+policy"}.get(cid, cid)
+            "B2": "+create_skill", "B3": "+create_skill +policy",
+            "B4": "base +create_skill +policy"}.get(cid, cid)
 
 
 def main() -> None:
