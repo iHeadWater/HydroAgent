@@ -53,29 +53,59 @@ def _plot_failure_stack(compiled: dict, out) -> None:
 
 
 def _plot_recovery_cost(compiled: dict, out) -> None:
-    import matplotlib.pyplot as plt
+    """Grouped-bar comparison of dynamic-recovery metrics across all 4 conditions.
 
-    rows = [r for r in compiled.get("failure_modes", []) if r.get("condition_id") == "B2"]
-    if not rows or not compiled.get("trial_records"):
-        raise SystemExit("No B2 recovery records found. Run the experiment before plotting.")
-    row = rows[0]
-    labels = ["create_skill rate", "recovery success", "mean turns/10", "mean tokens/10k"]
-    values = [
-        _val(row, "create_skill_rate"),
-        _val(row, "recovery_success_rate"),
-        _val(row, "mean_recovery_turns") / 10.0,
-        _val(row, "mean_recovery_tokens") / 10000.0,
+    Original chart only showed B2 (create_skill_rate=0 → all bars empty,
+    chart looked like a render bug). v2 shows B0/B1/B2/B3 side-by-side on
+    the metrics that actually distinguish them: task_success_rate,
+    hallucination_rate, ask_user_rate, create_skill_rate. The four-bar layout
+    makes the B0→B1 hallucination collapse and the B2→B3 create_skill jump
+    visible at a glance.
+    """
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    fm = {r["condition_id"]: r for r in compiled.get("failure_modes", [])}
+    conditions = [c for c in ("B0", "B1", "B2", "B3") if c in fm]
+    if not conditions:
+        raise SystemExit("No condition rows found in failure_modes.")
+    metrics = [
+        ("task_success_rate",   "Task success",     "#1B9E77"),
+        ("hallucination_rate",  "Hallucination",    "#B2182B"),
+        ("ask_user_rate",       "ask_user",         "#5B8DEF"),
+        ("create_skill_rate",   "create_skill",     "#7570B3"),
     ]
-    fig, ax = plt.subplots(figsize=(7.2, 4.5))
-    ax.bar(labels, values, color=["#7570B3", "#1B9E77", "#5B8DEF", "#D95F02"], alpha=0.88)
-    ax.set_ylabel("Normalized value")
-    ax.set_title("B2 dynamic recovery cost")
-    ax.grid(axis="y", color="#DDDDDD", linewidth=0.7, alpha=0.85)
-    ax.set_axisbelow(True)
-    ax.tick_params(axis="x", rotation=20)
+
+    fig, ax = plt.subplots(figsize=(8.5, 4.8))
+    x = np.arange(len(conditions))
+    width = 0.20
+    for i, (key, label, color) in enumerate(metrics):
+        vals = [_val(fm[c], key) for c in conditions]
+        ax.bar(x + (i - 1.5) * width, vals, width=width, label=label,
+               color=color, edgecolor="white", linewidth=0.6, alpha=0.92)
+        # annotate non-zero bars
+        for j, v in enumerate(vals):
+            if v > 0.001:
+                ax.text(x[j] + (i - 1.5) * width, v + 0.015,
+                        f"{int(round(v*100))}%", ha="center", fontsize=8)
+
+    ax.set_xticks(x)
+    ax.set_xticklabels([f"{c}\n({_condition_label(c)})" for c in conditions])
+    ax.set_ylabel("Rate (n = 20 per condition)")
+    ax.set_title("Failure-mode + dynamic-recovery comparison across tool conditions")
+    ax.set_ylim(0, 1.0)
+    ax.axhline(0.0, color="#888888", linewidth=0.8)
+    ax.legend(ncol=4, loc="upper center", bbox_to_anchor=(0.5, -0.10),
+              frameon=False, fontsize=9)
+    ax.grid(axis="y", alpha=0.3)
     fig.tight_layout()
     fig.savefig(out, dpi=300, bbox_inches="tight")
     plt.close(fig)
+
+
+def _condition_label(cid: str) -> str:
+    return {"B0": "basic", "B1": "full toolchain",
+            "B2": "+create_skill", "B3": "+create_skill\n+policy"}.get(cid, cid)
 
 
 def main() -> None:
