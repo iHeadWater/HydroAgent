@@ -66,7 +66,7 @@ def _plot_recovery_cost(compiled: dict, out) -> None:
     import numpy as np
 
     fm = {r["condition_id"]: r for r in compiled.get("failure_modes", [])}
-    conditions = [c for c in ("B0", "B1", "B2", "B3") if c in fm]
+    conditions = [c for c in ("B0", "B1", "B2", "B3", "B4") if c in fm]
     if not conditions:
         raise SystemExit("No condition rows found in failure_modes.")
     metrics = [
@@ -105,7 +105,8 @@ def _plot_recovery_cost(compiled: dict, out) -> None:
 
 def _condition_label(cid: str) -> str:
     return {"B0": "basic", "B1": "full toolchain",
-            "B2": "+create_skill", "B3": "+create_skill\n+policy"}.get(cid, cid)
+            "B2": "+create_skill", "B3": "+create_skill\n+policy",
+            "B4": "base+create_skill\n+policy"}.get(cid, cid)
 
 
 def main() -> None:

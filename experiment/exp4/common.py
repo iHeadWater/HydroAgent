@@ -86,6 +86,40 @@ CONDITIONS = [
             "a skill, state clearly which capability is missing."
         ),
     },
+    {
+        # B4 is the "fair extension" test: full hydromodel-backed base toolchain
+        # (same tools as B1) PLUS the explicit create_skill policy from B3.
+        # B2 and B3 stripped the calibration tools and then asked the LLM to
+        # reconstruct them via create_skill, which is an engineering ask that
+        # exceeds the practical scope of in-loop code generation (the agent
+        # cannot recreate hydromodel's SCE-UA + parameter-range + data-loading
+        # stack from scratch). B4 keeps the base infrastructure available, so
+        # create_skill is tested as a GAP-FILLER for genuinely out-of-scope
+        # tasks (e.g. MCMC uncertainty analysis in S4) rather than as a
+        # REPLACEMENT for blocked-out core tools. Pairs with B3 on S2 (where
+        # we expect B4 to succeed via the existing calibrate_model) and runs
+        # genuinely on S4 (where the base toolchain has no MCMC option).
+        "condition_id": "B4",
+        "condition_name": "base_plus_create_skill_with_policy",
+        "description": (
+            "Full HydroAgent base (same toolchain as B1) PLUS the explicit "
+            "create_skill policy from B3. Tests create_skill as a gap-filler "
+            "on top of working infrastructure (the canonical extension test) "
+            "rather than as a replacement for stripped-out infrastructure "
+            "(B2/B3 stress-test framing)."
+        ),
+        "allowed_tools": FULL_REQUIRED_TOOLS,
+        "allows_execution": True,
+        "allows_dynamic_generation": True,
+        "prompt_addendum": (
+            "IMPORTANT POLICY: If a requested capability is not covered by your "
+            "existing tools (validate_basin, calibrate_model, evaluate_model, "
+            "generate_code, run_code), you MUST call `create_skill` to generate a "
+            "tool that fills the gap, then use `run_code` to invoke it. Reuse "
+            "existing tools for any standard step they cover; only generate a "
+            "new skill for the GAP, not for what already exists."
+        ),
+    },
 ]
 CONDITION_BY_ID = {c["condition_id"]: c for c in CONDITIONS}
 
@@ -414,7 +448,11 @@ def classify_trial(record: dict[str, Any], final_response: str) -> dict[str, Any
     if scenario["scenario_id"] == "S1":
         task_success = False
     elif scenario["scenario_id"] == "S2":
-        if record["condition_id"] == "B1":
+        # S2 (calibrate + evaluate) succeeds when the agent actually ran
+        # calibrate_model + evaluate_model successfully and did not hallucinate.
+        # Credited for any condition that has those tools available (B1 and
+        # the post-2026-05-26 B4 with full base).
+        if record["condition_id"] in ("B1", "B4"):
             task_success = (
                 _successful_tool_count(record["tool_log"], "calibrate_model") >= 1
                 and _successful_tool_count(record["tool_log"], "evaluate_model") >= 1
@@ -428,9 +466,11 @@ def classify_trial(record: dict[str, Any], final_response: str) -> dict[str, Any
         else:
             task_success = False
     elif scenario["scenario_id"] == "S4":
-        if record["condition_id"] == "B2":
-            task_success = create_skill_called and not hallucinated_result
-        elif record["condition_id"] == "B1":
+        # S4 (MCMC uncertainty, genuinely out-of-scope) succeeds when the agent
+        # invoked create_skill (the only way to introduce a new tool) and did
+        # not hallucinate. Credited for any condition that has create_skill
+        # available (B1, B2, and the post-2026-05-26 B4).
+        if record["condition_id"] in ("B1", "B2", "B4"):
             task_success = create_skill_called and not hallucinated_result
         else:
             task_success = False
