@@ -67,6 +67,7 @@ TASKS = [
     {
         "task_id": "T1",
         "task_name": "standard_calibration",
+        "task_group": "execution",
         "query": (
             "Calibrate the GR4J model for CAMELS basin 12025000 using SCE-UA. "
             "Validate the basin first, then report train and test NSE/KGE from real tool outputs."
@@ -80,6 +81,7 @@ TASKS = [
     {
         "task_id": "T2",
         "task_name": "model_comparison",
+        "task_group": "execution",
         "query": (
             "For basin 03439000, compare GR4J and XAJ calibration performance. "
             "Run real calibration/evaluation for both models and choose the better model based on NSE/KGE."
@@ -92,21 +94,8 @@ TASKS = [
     },
     {
         "task_id": "T3",
-        "task_name": "code_analysis",
-        "query": (
-            "Generate and run Python code to calculate the runoff coefficient and flow-duration "
-            "curve for basin 12025000 using real available basin data. Do not calibrate a model."
-        ),
-        "expected_tools": ["generate_code", "run_code"],
-        "expected_first": "generate_code",
-        "expected_first_alt": "validate_basin",
-        "forbidden_tools": ["calibrate_model", "evaluate_model"],
-        "success_type": "code_analysis",
-        "description": "Route to code/data analysis rather than calibration.",
-    },
-    {
-        "task_id": "T4",
         "task_name": "failure_diagnosis",
+        "task_group": "general_diagnosis",
         "query": (
             "A previous XAJ calibration for basin 03439000 ended with train NSE=0.105. "
             "Four parameters were near upper bounds: CS=0.98 of [0,1], L=9.8 of [1,10], "
@@ -114,13 +103,13 @@ TASKS = [
             "(1) Explain what each parameter hitting its bound implies physically. "
             "(2) Would simply expanding all four ranges fix the problem, or does this pattern suggest a deeper issue? "
             "(3) Recommend the specific HydroAgent tool and workflow you would use for the next attempt. "
-            "Do not run any tools — answer from knowledge only."
+            "Do not run any tools -- answer from knowledge only."
         ),
         "expected_tools": [],
         "expected_first": None,
         "forbidden_tools": ["calibrate_model", "evaluate_model", "generate_code", "run_code"],
         "success_type": "diagnosis",
-        "description": "Diagnosis + HydroAgent workflow recommendation.",
+        "description": "General diagnostic reasoning; LLM pre-training should suffice.",
         "diagnosis_keywords": [
             "boundary", "upper bound", "range", "expand",
             "model structure", "structure", "mismatch", "switch model",
@@ -131,25 +120,21 @@ TASKS = [
         "diagnosis_min_keywords": 5,
     },
     {
-        "task_id": "T5",
+        "task_id": "T4",
         "task_name": "calibration_knowledge",
+        "task_group": "system_specific_knowledge",
         "query": (
-            "You need to calibrate GR4J for basins of varying difficulty using SCE-UA. "
-            "(1) What rep and ngs values does HydroAgent recommend for a quick test run, "
-            "a standard calibration, and a precision calibration? "
-            "(2) After calibrate_model succeeds, what is the complete tool call sequence "
-            "to obtain both train-period and test-period NSE/KGE? "
-            "(3) A calibration result shows test NSE=0.45 with x1=98 near its lower bound "
-            "of 100, and x2=-2.95 near its lower bound of -3. What does each parameter "
-            "hitting its bound imply physically for this basin, and what specific parameter "
-            "range adjustments would you recommend before re-calibrating? "
-            "Do not run any tools — answer from your knowledge of HydroAgent and GR4J."
+            "After a GR4J calibration run for basin 12025000, the result reports test NSE=0.45. "
+            "The selected parameters are x1=98 near the lower bound and x2=-2.95 near the lower bound. "
+            "The user asks: what evaluation should be run next, whether the search budget should be "
+            "quick, standard, or precision, and which parameter ranges should be adjusted before "
+            "the next run. Do not run tools; answer from the available workflow knowledge."
         ),
         "expected_tools": [],
         "expected_first": None,
         "forbidden_tools": ["calibrate_model", "evaluate_model", "generate_code", "run_code"],
         "success_type": "diagnosis",
-        "description": "Standard calibration workflow + parameter knowledge test.",
+        "description": "HydroAgent-specific workflow decision after a real calibration result.",
         "diagnosis_keywords": [
             "rep", "ngs", "200", "500", "2000",
             "evaluate_model", "train", "test", "训练", "测试",

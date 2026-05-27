@@ -1,10 +1,10 @@
-# Exp3 v2: Knowledge input ablation
+# Exp3 v2: Tool grounding and knowledge-on-demand
 
-This experiment replaces the old broad capability Exp3 as the formal Experiment 3. The old `experiment/exp3_capability_breadth.py` and `experiment/exp4_knowledge_ablation.py` are kept as legacy references, but the paper-facing experiment is now this directory.
+This experiment asks whether HydroAgent's reliability comes primarily from executable tool grounding, and when additional system-specific knowledge provides enough marginal value to justify its token cost.
 
 ## Question
 
-The experiment asks whether HydroAgent's execution performance is mainly determined by tool availability or by extra knowledge input. The design keeps the task set fixed and changes only the input condition.
+Does HydroAgent's reliability come primarily from executable tool grounding, and when does additional system-specific knowledge provide enough marginal value to justify its token cost?
 
 | Condition | Name | Input | Purpose |
 |---|---|---|---|
@@ -98,4 +98,9 @@ Figures:
 
 ## Paper Logic
 
-The expected conclusion is not that more knowledge is always better. The paper should show that tools are necessary for executable hydrological work, while full knowledge input mainly helps when the task requires diagnosis or recovery. If K1 approaches K2 on standard workflows with fewer tokens, that supports a tool-first and knowledge-on-demand design.
+The conclusion is tool-first, knowledge-on-demand:
+
+1. Executable tools are the non-negotiable foundation (K0->K1 closes the execution deficit).
+2. General diagnostic reasoning does not require the full knowledge pack (T3 is 5/5 for all conditions).
+3. System-specific workflow knowledge adds marginal reliability on T4, but at 5.3x token cost.
+4. The default prompt should stay lean (K1 level); load knowledge files only when the task requires system-specific workflow information.
