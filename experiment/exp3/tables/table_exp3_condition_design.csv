@@ -1,4 +1,0 @@
-condition_id,condition_name,description,tools_enabled,knowledge_level,tool_schema_names,skill_injected,knowledge_injected,memory_injected,system_prompt_tokens_est,tool_schema_tokens_est,knowledge_input_tokens_est
-K0,plain_llm,"No tools, no skill index, no knowledge base, no memory.",False,none,,False,False,False,88,0,0
-K1,tools_only,"Same required tools as K2, but no skill/domain/adapter/memory knowledge.",True,none,"ask_user,calibrate_model,evaluate_model,generate_code,inspect_dir,read_file,run_code,validate_basin",False,False,False,88,2062,0
-K2,full_knowledge,Same required tools as K1 plus full HydroAgent knowledge inputs.,True,full,"ask_user,calibrate_model,evaluate_model,generate_code,inspect_dir,read_file,run_code,validate_basin",True,True,True,6858,2062,3152

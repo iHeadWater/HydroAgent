@@ -1,5 +1,0 @@
-method,n_tasks,median_test_NSE,median_test_KGE,median_trials_to_best,human_active_min,total_tokens,minutes_saved_per_10k_tokens,agent_vs_random_percentile
-M0,5,0.415554,0.489671,1.0,0.0,0,,
-M1,0,,,,0.0,0,,
-M2,5,0.46228,0.489671,3.0,0,35034,0.0,
-M3,0,,,,0,0,,

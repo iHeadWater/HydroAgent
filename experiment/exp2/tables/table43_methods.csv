@@ -1,5 +1,0 @@
-method,name,llm_position,numeric_action,max_rounds,cost_record
-A,standard_sceua,None,SCE-UA over default parameter ranges,1,hydromodel wall time
-B,zhu_direct_eval,Before model evaluation,Directly evaluate each LLM-proposed parameter set,30,"LLM tokens, LLM decision time, direct evaluation time"
-C,llm_local_search,Before local optimization,Search within a tight range around each LLM proposal,30,"LLM tokens, LLM decision time, local-search time"
-D,hydroagent_feedback,After basin attributes and SCE-UA feedback,Revise ranges or budget between SCE-UA rounds,30,"LLM tokens, LLM decision time, hydromodel time"

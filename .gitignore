@@ -233,3 +233,13 @@ docs/media/*.mp4
 
 # Personal paper-writing artifacts (figures/results, not for publication)
 docs/figures/
+
+# === Handover whitelist for the experiment/ tree =============================
+# All experimental code is local-only EXCEPT the one HydroAgent entry-point
+# script that demonstrates the real agentic loop. Everything else (M0/M2/M3
+# scripts, exp2/3/4, compile/plot utilities, etc.) stays on local disk for you
+# but is NOT pushed to the cloud, so the new developer sees a clean tree.
+experiment/*
+!experiment/exp1/
+experiment/exp1/*
+!experiment/exp1/exp1_hydroagent.py
