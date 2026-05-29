@@ -243,3 +243,6 @@ experiment/*
 !experiment/exp1/
 experiment/exp1/*
 !experiment/exp1/exp1_hydroagent.py
+!experiment/exp2/
+experiment/exp2/*
+!experiment/exp2/exp2_llm_methods.py
