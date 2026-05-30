@@ -72,17 +72,43 @@ python -m hydroagent --server
 
 ---
 
-## 4. 跑入口示范脚本
+## 4. 跑示范脚本
+
+`experiment/exp1/` 下有三个示范脚本,对应论文里的三个 LLM 率定办法。共享一个本地依赖 `_common.py`(从 exp2 复制过来的工具函数,自包含)。
+
+### 办法 B:HydroAgent(真实 agent loop)
 
 ```bash
 PYTHONUTF8=1 python experiment/exp1/exp1_hydroagent.py
 ```
 
-这是仓库里**唯一一个真实调 `HydroAgent.run(自然语言查询)` 的脚本**,~70 行,容易看懂。它会对 3 个 CAMELS-US 流域(易 / 中 / 难各一)各跑一次 GR4J + SCE-UA 率定,agent 自己决定 `validate_basin → calibrate_model → evaluate_model` 的工具链,跑完写一个 `experiment/exp1/results/exp1_hydroagent_results.json`,里面有每个 run 的 `tool_sequence` / `calibration_dir` / token 消耗。
+**唯一一个真实调 `HydroAgent.run(自然语言查询)` 的脚本**,~70 行。3 个示范流域(易/中/难),自然语言驱动 `validate_basin → calibrate_model → evaluate_model`。跑完产物在 `experiment/exp1/results/exp1_hydroagent_results.json`,字段 `tool_sequence` 应该含这三个工具。**了解 HydroAgent 怎么用的最快路径**。
 
-**这是你了解 HydroAgent 怎么用的最快路径。** 推荐用编辑器打开 `experiment/exp1/exp1_hydroagent.py` 读一遍,几分钟就能掌握"自然语言 → agent → 真实数值结果"的整条链路。
+### 办法 C:LLM-Direct(Zhu 直接猜参数)
 
-跑通后看 `experiment/exp1/results/exp1_hydroagent_results.json` 的 `tool_sequence` 字段应该包含 `validate_basin / calibrate_model / evaluate_model` 三个工具,缺任何一个说明 agent 路径有问题。
+```bash
+PYTHONUTF8=1 python experiment/exp1/exp1_llm_direct.py
+```
+
+每代 LLM 直接吐一组参数,as-is 评估(无任何数值优化)。靠多代独立提议形成的多样性做隐式正则化。3 流域、min50/max200 迭代、按 train NSE 早停。产物:`experiment/exp1/results_llm_direct/trials.jsonl`。
+
+### 办法 D:LLM-LocalSearch
+
+```bash
+PYTHONUTF8=1 python experiment/exp1/exp1_llm_localsearch.py
+```
+
+每代 LLM 提议 + scipy SLSQP 在 ±3% 窗口里精修(目标:train NSE)。比 C 多了"局部优化"那一步。3 流域、同样的 min/max/patience。产物:`experiment/exp1/results_llm_localsearch/trials.jsonl`。
+
+### 注意
+
+C 和 D **故意绕过 agent loop**(直接用 LLMClient + hydromodel skills),因为每代是紧密数值循环,走完整 agent loop 太重。只有 B (`exp1_hydroagent.py`) 是 ReAct 全循环的示范。三个脚本结构平行,逻辑都很短,适合并列对比阅读。
+
+快速 smoke(各跑 1 流域、小迭代验证脚本通):
+```bash
+python experiment/exp1/exp1_llm_direct.py      --basins 08101000 --max-iters 6 --overwrite
+python experiment/exp1/exp1_llm_localsearch.py --basins 12025000 --max-iters 3 --overwrite
+```
 
 ---
 
