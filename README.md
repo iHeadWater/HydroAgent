@@ -74,11 +74,18 @@ cd HydroAgent
 python -m venv .venv
 
 # Windows
-.venv\Scripts\python.exe -m pip install -r requirements.txt
+.venv\Scripts\python.exe -m pip install -e .
 
 # Linux / macOS
-.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python -m pip install -e .
 ```
+
+> **Note on `hydromodel`.** `pip install` will automatically pull the `dev`
+> branch of [`OuyangWenyu/hydromodel`](https://github.com/OuyangWenyu/hydromodel)
+> from GitHub, not the PyPI release. The `dev` branch contains a fix for a
+> silent parameter-range bug and an ~290× GR4J speed-up that the experiments
+> rely on. If you ever see "changing the parameter range has no effect on the
+> NSE", you have somehow ended up on the PyPI version — reinstall.
 
 ### Configure
 
@@ -129,7 +136,7 @@ agent = HydroAgent(workspace=Path("results/exp1"), ui=ConsoleUI(mode="dev"))
 agent.run("Calibrate GR4J for basin 12025000 with SCE-UA")
 ```
 
-All paper experiments use this mode; see the `experiment/` directory.
+This is also the path used by the paper experiments.
 
 ---
 
@@ -236,41 +243,10 @@ HydroAgent/
 │       ├── context_utils.py      # token estimation & context truncation
 │       ├── task_state.py         # batch-task state persistence
 │       └── basin_validator.py    # basin data validation
-├── configs/
-│   ├── example_private.py        # config template (committed)
-│   └── private.py                # actual config (gitignored)
-├── experiment/                   # paper experiment scripts
-│   ├── exp1_standard_calibration.py   # agent-driven standard calibration baseline
-│   ├── exp1_scripted_baseline.py      # scripted baseline (no agent layer, numerical reference)
-│   ├── exp2_llm_calibration.py        # three-way LLM calibration comparison
-│   ├── exp3_knowledge_ablation.py     # structured knowledge-layer ablation
-│   └── exp4_capability_boundaries.py  # agent capability boundaries
-├── results/paper/                # experiment results
-└── plot/                         # figure scripts & outputs
+└── configs/
+    ├── example_private.py        # config template (committed)
+    └── private.py                # actual config (gitignored)
 ```
-
----
-
-## Reproducing the Paper Experiments
-
-All results are stored in `results/paper/`; figure scripts live in `plot/`.
-
-```bash
-# Run experiments (~2-4 h each)
-python experiment/exp1_standard_calibration.py   # Exp1: agent-driven standard calibration baseline
-python experiment/exp1_scripted_baseline.py      # Exp1: scripted baseline (numerical reference)
-python experiment/exp2_llm_calibration.py        # Exp2: three-way LLM calibration comparison
-python experiment/exp3_knowledge_ablation.py     # §4.3: structured knowledge-layer ablation
-python experiment/exp4_capability_boundaries.py  # §4.4: agent capability boundaries
-
-# Generate figures
-python plot/exp1_figures.py
-python plot/exp2_figures.py
-python plot/exp3_figures.py
-python plot/exp4_figures.py
-```
-
-See `experiment/README.md` and `plot/README.md` for details.
 
 ---
 

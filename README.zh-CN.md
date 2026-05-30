@@ -74,11 +74,17 @@ cd HydroAgent
 python -m venv .venv
 
 # Windows
-.venv\Scripts\python.exe -m pip install -r requirements.txt
+.venv\Scripts\python.exe -m pip install -e .
 
 # Linux / macOS
-.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python -m pip install -e .
 ```
+
+> **关于 `hydromodel`**:`pip install` 会自动从 GitHub 拉
+> [`OuyangWenyu/hydromodel`](https://github.com/OuyangWenyu/hydromodel) 的
+> **dev 分支**(不是 PyPI 发布版)。dev 分支包含参数范围被静默忽略的 bug
+> 修复,以及 GR4J ~290× 加速 — 论文实验依赖这两点。如果遇到"调参数范围
+> 不影响 NSE"的情况,八成是装到了 PyPI 版本,重装即可。
 
 ### 配置
 
@@ -128,7 +134,7 @@ agent = HydroAgent(workspace=Path("results/exp1"), ui=ConsoleUI(mode="dev"))
 agent.run("率定 GR4J 模型，流域 12025000，SCE-UA 算法")
 ```
 
-论文实验脚本均采用此模式，详见 `experiment/` 目录。
+论文实验也采用此模式。
 
 ---
 
@@ -225,41 +231,10 @@ HydroAgent/
 │       ├── context_utils.py      # Token 估算与上下文截断
 │       ├── task_state.py         # 批量任务状态持久化
 │       └── basin_validator.py    # 流域数据验证
-├── configs/
-│   ├── example_private.py        # 配置模板（提交到仓库）
-│   └── private.py                # 实际配置（gitignore）
-├── experiment/                   # 论文实验脚本
-│   ├── exp1_standard_calibration.py   # Agent 驱动标准率定基线
-│   ├── exp1_scripted_baseline.py      # 脚本基线（无 Agent 层，数值对照）
-│   ├── exp2_llm_calibration.py        # LLM 率定三路对比
-│   ├── exp3_knowledge_ablation.py     # 结构化知识层消融
-│   └── exp4_capability_boundaries.py  # Agent 能力边界
-├── results/paper/                # 实验结果
-└── plot/                         # 论文配图脚本与输出
+└── configs/
+    ├── example_private.py        # 配置模板（提交到仓库）
+    └── private.py                # 实际配置（gitignore）
 ```
-
----
-
-## 复现论文实验
-
-所有实验结果保存在 `results/paper/`，配图脚本在 `plot/`。
-
-```bash
-# 运行实验（各约 2-4 小时）
-python experiment/exp1_standard_calibration.py   # Exp1：Agent 驱动标准率定基线
-python experiment/exp1_scripted_baseline.py      # Exp1：脚本基线（数值对照）
-python experiment/exp2_llm_calibration.py        # Exp2：LLM 率定三路对比
-python experiment/exp3_knowledge_ablation.py     # §4.3：结构化知识层消融
-python experiment/exp4_capability_boundaries.py  # §4.4：Agent 能力边界
-
-# 生成论文配图
-python plot/exp1_figures.py
-python plot/exp2_figures.py
-python plot/exp3_figures.py
-python plot/exp4_figures.py
-```
-
-详见 `experiment/README.md` 和 `plot/README.md`。
 
 ---
 
