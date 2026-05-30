@@ -20,9 +20,10 @@ dependencies = [
     "uvicorn[standard]>=0.27.0",
     "aiofiles>=23.0",
     # 水文建模后端
-    # NOTE: hydromodel 用项目维护的 dlut-water fork(含 param_range 处理修复等,
-    # 与论文实验所用版本一致)。不要用 PyPI 版本,否则率定行为可能不一致。
-    "hydromodel @ git+https://gitcode.com/dlut-water/hydromodel.git@main",
+    # NOTE: hydromodel 用 OuyangWenyu/hydromodel 的 dev 分支(含 param_range
+    # 反归一化 bug 修复 + GR4J JIT 290x 加速,论文实验所用版本)。
+    # 不要用 PyPI 版本,会导致率定行为不一致。
+    "hydromodel @ git+https://github.com/OuyangWenyu/hydromodel.git@dev",
     "hydroutils>=0.1.0",
     "hydrodataset>=0.2.3",
     "hydrodatasource>=0.2.0",

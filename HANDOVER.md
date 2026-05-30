@@ -13,7 +13,7 @@ python -m venv .venv
 .venv\Scripts\python.exe -m pip install -e .
 ```
 
-**装包期间会自动从 github 拉一个 hydromodel fork**(`zhuanglaihong/hydromodel`)。这一步很关键 — 项目用的是修了 `param_range` 反归一化 bug、并把 GR4J 加速了 290 倍的 fork 版本,不是 PyPI 上的 `hydromodel==0.3.2`。如果你后续看到率定时"参数范围调了也不影响 NSE",八成是装到了 PyPI 版本,要重装。
+**装包期间会自动从 github 拉 hydromodel 的 dev 分支**(`OuyangWenyu/hydromodel @ dev`)。这一步很关键 — 项目用的是修了 `param_range` 反归一化 bug、并把 GR4J 加速了 290 倍的 dev 分支版本,不是 PyPI 上的 `hydromodel==0.3.2`。如果你后续看到率定时"参数范围调了也不影响 NSE",八成是装到了 PyPI 版本,要重装。
 
 **验证 hydromodel 装对了**:
 
@@ -124,7 +124,7 @@ python experiment/exp1/exp1_llm_localsearch.py --basins 12025000 --max-iters 3 -
 ## 验证交接成功(干净机器上跑一遍)
 
 1. `git clone` 仓库到新目录
-2. `python -m venv .venv && .venv\Scripts\python.exe -m pip install -e .`(看到 pip 自动 `git clone` `zhuanglaihong/hydromodel`)
+2. `python -m venv .venv && .venv\Scripts\python.exe -m pip install -e .`(看到 pip 自动 `git clone` `OuyangWenyu/hydromodel`,分支 dev)
 3. `python -c "import os, hydromodel; print(os.path.exists(os.path.join(os.path.dirname(hydromodel.__file__), 'models', 'SMS_3.py')))"` 输出 `True`
 4. 复制 `configs\example_private.py` 为 `private.py`,填上 LLM 密钥和真实 `DATASET_DIR`
 5. `python -m hydroagent` 起 REPL,能聊
