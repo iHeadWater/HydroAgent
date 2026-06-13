@@ -2,10 +2,11 @@
 私有配置模板 - configs/example_private.py
 ==========================================
 将本文件复制为 configs/private.py 并填写实际值。
-此文件是模板，可提交到版本库；private.py 已加入 .gitignore。
 
-HydroAgent 启动时会根据此处的路径自动生成 ~/hydro_setting.yml，
-无需手动配置 hydrodataset 的路径。
+推荐使用 .env 文件配置（更简洁，无需改 Python 代码）：
+  cp .env.example .env  然后编辑 .env 填写实际值即可。
+
+此文件是 Python 配置方式（向后兼容），private.py 已加入 .gitignore。
 """
 
 # ============================================================================
