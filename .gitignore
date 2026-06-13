@@ -197,6 +197,8 @@ documents/vector_db/
 documents/*.json
 output/
 /.claude/
+.omx/
+.pytest_cache/
 __pycache__/
 *.pyc
 definitions_private.py

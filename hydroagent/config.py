@@ -12,6 +12,35 @@ from typing import Any
 import yaml
 
 
+def _load_dotenv():
+    """Load .env file from project root into os.environ (never overrides existing vars).
+
+    Called once at import time so all downstream code sees the env vars.
+    Lines are silently skipped if the file doesn't exist, is empty, or the
+    line is a comment / malformed.
+    """
+    env_path = Path(__file__).parent.parent / ".env"
+    if not env_path.exists():
+        return
+    with open(env_path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key = key.strip()
+            value = value.strip()
+            # Strip surrounding quotes (both single and double)
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
+                value = value[1:-1]
+            if key not in os.environ:
+                os.environ[key] = value
+
+
+# Load .env at module import time (idempotent — won't override existing env vars)
+_load_dotenv()
+
+
 # ── 内部完整默认值 ────────────────────────────────────────────────────────
 # 这里是项目内部兜底配置，保证在 configs/config.py 未设置任何参数时也能正常运行。
 # 用户自定义参数请在 configs/config.py 中修改，该文件的值会覆盖这里的默认值。
@@ -150,19 +179,69 @@ def _ensure_hydro_setting(dataset_dir: str | None, cache_dir: str | None = None,
     # )
 
 
+def _apply_env_overrides(cfg: dict):
+    """Apply environment variables on top of cfg (env vars override private.py).
+
+    Supported env vars:
+      LLM_API_KEY, LLM_BASE_URL, LLM_MODEL, LLM_TEMPERATURE,
+      LLM_MAX_TOKENS, LLM_TIMEOUT, LLM_MAX_RETRIES,
+      DATASET_DIR, RESULT_DIR, PROJECT_DIR, CACHE_DIR,
+      SELFMADE_DATA_PATH, SELFMADE_DATASET_NAME,
+      HYDROAGENT_MAX_TURNS
+    """
+    llm = cfg.setdefault("llm", {})
+    paths = cfg.setdefault("paths", {})
+
+    _set_if_present(llm, "api_key", "LLM_API_KEY")
+    _set_if_present(llm, "base_url", "LLM_BASE_URL")
+    _set_if_present(llm, "model", "LLM_MODEL")
+    _set_if_present(llm, "temperature", "LLM_TEMPERATURE", _to_float)
+    _set_if_present(llm, "max_tokens", "LLM_MAX_TOKENS", _to_int)
+    _set_if_present(llm, "timeout", "LLM_TIMEOUT", _to_int)
+    _set_if_present(llm, "max_retries", "LLM_MAX_RETRIES", _to_int)
+
+    _set_if_present(paths, "dataset_dir", "DATASET_DIR")
+    _set_if_present(paths, "results_dir", "RESULT_DIR")
+    _set_if_present(paths, "project_dir", "PROJECT_DIR")
+    _set_if_present(paths, "cache_dir", "CACHE_DIR")
+    _set_if_present(paths, "selfmade_data_path", "SELFMADE_DATA_PATH")
+    _set_if_present(paths, "selfmade_dataset_name", "SELFMADE_DATASET_NAME")
+
+    _set_if_present(cfg, "max_turns", "HYDROAGENT_MAX_TURNS", _to_int)
+
+
+def _set_if_present(d: dict, key: str, env_var: str, convert=None):
+    """Set d[key] from os.environ[env_var] if the var exists."""
+    val = os.environ.get(env_var)
+    if val is not None:
+        d[key] = convert(val) if convert else val
+
+
+def _to_int(v: str) -> int:
+    return int(v)
+
+
+def _to_float(v: str) -> float:
+    return float(v)
+
+
 def load_config(config_path: str | Path | None = None) -> dict[str, Any]:
     """Load configuration from JSON file, falling back to defaults.
 
     Search order (highest priority last, so later overwrites earlier):
       1. Built-in DEFAULTS
       2. HydroAgent legacy configs/definitions*.py
-      3. ~/.hydroagent/config.json  (user-level, written by setup wizard)
-      4. config_path argument       (explicit override, e.g. --config)
+      3. .env file  (env vars loaded at import time)
+      4. ~/.hydroagent/config.json  (user-level, written by setup wizard)
+      5. config_path argument       (explicit override, e.g. --config)
     """
     cfg = _deep_copy(DEFAULTS)
 
     # Try loading from HydroAgent's existing config (lowest external priority)
     _load_from_hydroagent(cfg)
+
+    # Apply env vars from .env / OS environment (overrides private.py)
+    _apply_env_overrides(cfg)
 
     # Load user-level config written by the setup wizard (saved in project root)
     user_cfg_path = Path(__file__).parent.parent / "hydroagent_config.json"
@@ -175,7 +254,7 @@ def load_config(config_path: str | Path | None = None) -> dict[str, Any]:
         with open(config_path, "r", encoding="utf-8") as f:
             _deep_merge(cfg, json.load(f))
 
-    # Override API key from environment
+    # Override API key from environment (uses api_key_env key if set)
     api_key_env = cfg["llm"].get("api_key_env", "LLM_API_KEY")
     env_key = os.environ.get(api_key_env)
     if env_key:
